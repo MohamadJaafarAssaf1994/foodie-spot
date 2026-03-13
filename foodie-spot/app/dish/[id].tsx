@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { restaurantAPI } from "@/services/api";
 import { Dish } from "@/types";
@@ -13,17 +13,17 @@ export default function DishScreen() {
     const [dish, setDish] = useState<Dish | null>(null);
     const [quantity, setQuantity] = useState<number>(1);
 
-    useEffect(() => {
-        loadDish();
-    }, [id]);
-
-    const loadDish = async () => {
+    const loadDish = useCallback(async () => {
         // const dishData = await restaurantAPI.getDishById(id);
         const dishData = await Promise.all(['r1', 'r2'].map((rid) => restaurantAPI.getMenu(rid)));
         const allDishes = dishData.flat();
         const foundDish = allDishes.find((d) => d.id === id) || null;
         setDish(foundDish);
-    };
+    }, [id]);
+
+    useEffect(() => {
+        void loadDish();
+    }, [loadDish]);
 
     if (!dish) {
         return (

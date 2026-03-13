@@ -1,3 +1,8 @@
+export interface DeliveryTimeRange {
+    min: number;
+    max: number;
+}
+
 export interface Restaurant {
     id: string;
     name: string;
@@ -6,7 +11,7 @@ export interface Restaurant {
     image: string;
     rating: number;
     reviewsCount: number;
-    deliveryTime: number;
+    deliveryTime: number | DeliveryTimeRange;
     distance: number;
     priceRange: string;
     address: string;
@@ -28,7 +33,7 @@ export interface SearchFilters {
 }
 export interface Dish {
     id: string;
-    resurantId: string;
+    restaurantId: string;
     name: string;
     description: string;
     price: number;
@@ -102,7 +107,7 @@ export interface ToastOptions {
     duration?: number;
 }
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastContextType { 
     show: (message: string,  type?: ToastType, duration?: number) => void;

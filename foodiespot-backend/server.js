@@ -220,40 +220,19 @@ app.post("/auth/login", (req, res) => {
     return res.status(400).json({ success: false, message: "Email et mot de passe requis" });
   }
 
-  // Pour le mock: on accepte tout ou on vérifie dans users.json
-  let user = users.find(u => u.email === email);
-  
+  const user = users.find(u => u.email === email);
   if (!user) {
-    // Créer un utilisateur mock si n'existe pas
-    user = {
-      id: uuidv4(),
-      email,
-      firstName: email.split("@")[0],
-      lastName: "Demo",
-      phone: "",
-      avatar: "",
-      addresses: [
-        {
-          id: uuidv4(),
-          label: "Maison",
-          street: "123 Rue de Paris",
-          city: "Paris",
-          postalCode: "75001",
-          country: "France",
-          latitude: 48.8566,
-          longitude: 2.3522,
-          isDefault: true
-        }
-      ],
-      notificationsEnabled: true,
-      preferences: {
-        theme: "system",
-        language: "fr"
-      },
-      createdAt: new Date().toISOString()
-    };
-    users.push({ ...user, password });
-    saveJSON("users.json", users);
+    return res.status(401).json({
+      success: false,
+      message: "Email ou mot de passe incorrect",
+    });
+  }
+
+  if (!user.password || user.password !== password) {
+    return res.status(401).json({
+      success: false,
+      message: "Email ou mot de passe incorrect",
+    });
   }
 
   const { password: _, ...userWithoutPassword } = user;

@@ -30,7 +30,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       log.debug('🔍 [AuthContext] Checking auth state...');
       setIsLoading(true);
       setError(null);
-      const state = await auth.getAuthState();
+      const state = await Promise.race([
+        auth.getAuthState(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+        ),
+      ]);
       setUser(state.user);
       setIsAuthenticated(state.isAuthenticated);
       log.debug('✅ [AuthContext] Auth state:', state.isAuthenticated ? 'authenticated' : 'not authenticated');
@@ -55,6 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const result = await auth.login(credentials);
       await new Promise(resolve => setTimeout(resolve, 100));
       const state = await auth.getAuthState();
+      setError(null);
       setUser(state.user);
       setIsAuthenticated(state.isAuthenticated);
       log.info('✅ [AuthContext] Login completed');
@@ -77,6 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const result = await auth.register(data);
       await new Promise(resolve => setTimeout(resolve, 100));
       const state = await auth.getAuthState();
+      setError(null);
       setUser(state.user);
       setIsAuthenticated(state.isAuthenticated);
       log.info('✅ [AuthContext] Registration completed');
@@ -97,10 +104,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       setError(null);
       await auth.logout();
+      setError(null);
       setUser(null);
       setIsAuthenticated(false);
       log.info('✅ [AuthContext] Logout completed');
-     router.replace('/login');
+     router.replace('/(auth)/login');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Échec de déconnexion';
       setError(message);
@@ -112,6 +120,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const refreshAuth = useCallback(async () => {
+    setError(null);
     await checkAuth();
   }, [checkAuth]);
 

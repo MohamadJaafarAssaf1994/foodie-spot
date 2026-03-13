@@ -1,4 +1,5 @@
 import { Restaurant } from '@/types';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { Image } from 'expo-image';
 import { Clock, MapPin, Star } from 'lucide-react-native';
 import React from 'react';
@@ -13,7 +14,13 @@ interface Props {
 
 export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }) => {
     return (
-        <TouchableOpacity style={[styles.card, compact && styles.compact]} onPress={onPress}>
+        <TouchableOpacity
+            style={[styles.card, compact && styles.compact]}
+            accessibilityRole="button"
+            accessibilityLabel={`Ouvrir le restaurant ${restaurant.name}`}
+            activeOpacity={0.85}
+            onPress={onPress}
+        >
             <Image source={{ uri: restaurant.image }} style={[styles.image, compact && styles.compactImage]} />
 
             <View style={styles.content}>
@@ -27,11 +34,11 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
                 <Text style={styles.cuisine}>{restaurant.cuisine}</Text>
                 <View style={styles.meta}>
                     <View style={styles.metaItem}>
-                        <Star size={16} color="#FF6B35" />
-                        <Text style={styles.metaText}>{restaurant.rating} {restaurant.reviewCount} avis</Text>
+                        <Star size={16} color={Colors.light.primary} />
+                        <Text style={styles.metaText}>{restaurant.rating} {restaurant.reviewsCount} avis</Text>
                     </View>
                     <View style={styles.metaItem}>
-                        <Clock size={16} color="#FF6B35" />
+                        <Clock size={16} color={Colors.light.primary} />
                         <Text style={styles.metaText}>
                             {typeof restaurant.deliveryTime === 'object' 
                                 ? `${restaurant.deliveryTime.min}-${restaurant.deliveryTime.max}` 
@@ -40,7 +47,7 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
                     </View>
 
                     <View style={styles.metaItem}>
-                        <MapPin size={16} color="#FF6B35" />
+                        <MapPin size={16} color={Colors.light.primary} />
                         <Text style={styles.metaText}>{restaurant.distance ?? 15} km</Text>
                     </View>
                     {!compact && <Text style={styles.description} numberOfLines={2}>{restaurant.description}</Text>}
@@ -58,9 +65,9 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
 const styles = StyleSheet.create({
     card: {
         flexDirection: 'row',
-        marginBottom: 16,
-        backgroundColor: '#FFF',
-        borderRadius: 16,
+        marginBottom: Spacing.lg,
+        backgroundColor: Colors.light.surface,
+        borderRadius: Radius.lg,
         overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -69,7 +76,7 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     compact: {
-        marginBottom: 12,
+        marginBottom: Spacing.md,
     },
     image: {
         width: 120,
@@ -81,7 +88,7 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        padding: 12,
+        padding: Spacing.md,
         gap: 6
     },
     header: {
@@ -96,18 +103,18 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     badge: {
-        backgroundColor: '#FFE5DB',
+        backgroundColor: Colors.light.surfaceMuted,
         paddingHorizontal: 8,
         paddingVertical: 4,
-        borderRadius: 8,
+        borderRadius: Radius.sm,
     },
     badgeText: {
-        color: '#FF6B35',
+        color: Colors.light.primary,
         fontSize: 12,
         fontWeight: '600',
     },
     cuisine: {
-        color: '#666',
+        color: Colors.light.textMuted,
         fontSize: 13
     },
     meta: {
@@ -122,11 +129,11 @@ const styles = StyleSheet.create({
     },
     metaText: {
         fontSize: 12,
-        color: '#666',
+        color: Colors.light.text,
     },
 
     description: {
         fontSize: 12,
-        color: '#666',
+        color: Colors.light.textMuted,
     }
 });

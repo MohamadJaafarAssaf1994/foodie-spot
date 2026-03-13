@@ -1,27 +1,29 @@
-import { useEffect, useState } from "react";
+import { ErrorState } from "@/components/error-state";
+import { LoadingState } from "@/components/loading-state";
 import { useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Order } from "@/types";
-import { orderAPI } from "@/services/api";
+import { useOrderTracking } from "@/hooks/use-order-tracking";
 
 export default function TrackingScreen() {
     const { orderId } = useLocalSearchParams<{ orderId: string }>();
-    const [order, setOrder] = useState<Order | null>(null);
+    const { order, loading, error } = useOrderTracking(orderId);
 
-    useEffect(() => {
-        loadOrder();
-    }, [orderId]);
-
-    const loadOrder = async () => {
-        const orderData = await orderAPI.getOrderById(orderId);
-        setOrder(orderData);
-    };
+    if (loading && !order) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <LoadingState />
+            </SafeAreaView>
+        );
+    }
 
     if (!order) {
         return (
             <SafeAreaView style={styles.container} edges={['top']}>
-                <Text>Loading...</Text>
+                <View style={styles.content}>
+                    <Text style={styles.title}>Suivi commande</Text>
+                    <ErrorState message={error || 'Commande introuvable.'} />
+                </View>
             </SafeAreaView>
         );
     }
@@ -30,6 +32,7 @@ export default function TrackingScreen() {
         <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView contentContainerStyle={styles.content}>
                 <Text style={styles.title}>Suivi commande</Text>
+                {error ? <ErrorState message={error} /> : null}
                 <Text style={styles.subtitle}>Commande #{order.id}</Text>
                 <View style={styles.card}>
                     <Text style={styles.label}>Restaurant</Text>

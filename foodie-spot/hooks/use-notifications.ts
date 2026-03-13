@@ -1,11 +1,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
-import { notifications, NotificationPreferences, PushToken } from "@/services/notification";
+import { notifications, NotificationPayload, NotificationPreferences, PushToken } from "@/services/notification";
 
 export const useNotifications = (
     onReceived?: (notification: Notifications.Notification) => void,
-    onTapped?: (datam: any) => void
+    onTapped?: (data: Notifications.NotificationResponse['notification']['request']['content']['data']) => void
 ) => {
     const [pushToken, setPushToken] = useState<PushToken | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -24,19 +24,12 @@ export const useNotifications = (
 
     const loadData = async () => {
         try {
-
-            const [token, prefs, badge, scheduledList] = await Promise.all([
-                notifications.getToken(),
-                notifications.getPreferences(),
-                // notifications.getBadge(),
-                notifications.getScheduled(),
-            ]);
-
-            setPushToken(token);
-            setPreferences(prefs);
-            setBadgeCount(badge);
-            setScheduled(scheduledList);
-            setHasPermission(!!token);
+            const state = await notifications.getState();
+            setPushToken(state.pushToken);
+            setPreferences(state.preferences);
+            setBadgeCount(state.badgeCount);
+            setScheduled(state.scheduled);
+            setHasPermission(!!state.pushToken);
         } finally {
             setIsLoading(false);
         }
@@ -64,11 +57,11 @@ export const useNotifications = (
         }
     }, []);
 
-    const send = useCallback((title: string, body: string, data?: any) => {
+    const send = useCallback((title: string, body: string, data?: NotificationPayload) => {
         return notifications.send(title, body, data);
     }, []);
 
-    const schedule = useCallback(async (title: string, body: string, date: Date, data?: any) => {
+    const schedule = useCallback(async (title: string, body: string, date: Date, data?: NotificationPayload) => {
         const id = await notifications.schedule(title, body, date, data);
         await refreshScheduled();
         return id;
@@ -112,8 +105,12 @@ export const useNotifications = (
 
 
     const refreshScheduled = useCallback(async () => {
-        const list = await notifications.getScheduled();
-        setScheduled(list);
+        const state = await notifications.getState();
+        setScheduled(state.scheduled);
+        setBadgeCount(state.badgeCount);
+        setPreferences(state.preferences);
+        setPushToken(state.pushToken);
+        setHasPermission(!!state.pushToken);
     }, []);
 
     return {

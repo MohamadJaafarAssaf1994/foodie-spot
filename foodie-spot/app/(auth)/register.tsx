@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { Eye, EyeOff, Mail, Lock, User, Phone } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/auth-context';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 
 export default function RegisterScreen() {
   const { register, isLoading, error } = useAuth();
@@ -28,7 +28,7 @@ export default function RegisterScreen() {
     setLocalError('');
     try {
       await register({ email: email.trim(), password, firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim() });
-    } catch (err) {
+    } catch {
       console.log('Register error handled');
     }
   };
@@ -74,7 +74,13 @@ export default function RegisterScreen() {
             <View style={styles.inputContainer}>
               <Lock size={20} color="#999" />
               <TextInput style={styles.input} placeholder="Mot de passe" value={password} onChangeText={t => { setPassword(t); setLocalError(''); }} secureTextEntry={!showPassword} editable={!isLoading} />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                hitSlop={8}
+                style={styles.iconButton}
+                onPress={() => setShowPassword(!showPassword)}
+              >
                 {showPassword ? <EyeOff size={20} color="#999" /> : <Eye size={20} color="#999" />}
               </TouchableOpacity>
             </View>
@@ -99,21 +105,22 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  logoContainer: { alignItems: 'center', marginBottom: 24 },
+  container: { flex: 1, backgroundColor: Colors.light.background },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', padding: Spacing.xl },
+  logoContainer: { alignItems: 'center', marginBottom: Spacing.xl },
   logo: { fontSize: 48, marginBottom: 8 },
   title: { fontSize: 28, fontWeight: 'bold', color: Colors.light.tint },
-  errorContainer: { backgroundColor: '#FFEBEE', padding: 12, borderRadius: 12, marginBottom: 16 },
-  errorText: { color: '#D32F2F', fontSize: 14, textAlign: 'center' },
+  errorContainer: { backgroundColor: '#FEF2F2', padding: Spacing.md, borderRadius: Radius.md, marginBottom: Spacing.lg },
+  errorText: { color: Colors.light.error, fontSize: 14, textAlign: 'center' },
   form: { width: '100%' },
-  nameRow: { flexDirection: 'row', gap: 12 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 12, marginBottom: 12, paddingHorizontal: 16, gap: 12 },
-  input: { flex: 1, paddingVertical: 16, fontSize: 16, color: '#000' },
-  button: { backgroundColor: Colors.light.tint, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
+  nameRow: { flexDirection: 'row', gap: Spacing.md },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.light.surfaceMuted, borderRadius: Radius.md, marginBottom: Spacing.md, paddingHorizontal: Spacing.lg, gap: Spacing.md },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, paddingVertical: Spacing.lg, fontSize: 16, color: Colors.light.text },
+  button: { backgroundColor: Colors.light.tint, borderRadius: Radius.md, padding: Spacing.lg, alignItems: 'center', marginTop: Spacing.sm },
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  loginButton: { alignItems: 'center', padding: 16, marginTop: 16 },
-  loginText: { color: '#666', fontSize: 14 },
+  loginButton: { alignItems: 'center', padding: Spacing.lg, marginTop: Spacing.lg },
+  loginText: { color: Colors.light.textMuted, fontSize: 14 },
   loginTextBold: { color: Colors.light.tint, fontWeight: '600' },
 });

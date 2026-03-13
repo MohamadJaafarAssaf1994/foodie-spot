@@ -1,9 +1,9 @@
 // services/auth.ts
 
 import * as SecureStore from 'expo-secure-store';
-import api from './api';
+import api, { getApiErrorMessage } from './api';
 import log from './logger';
-import { STORAGE_KEYS } from './storage';
+import { storage, STORAGE_KEYS } from './storage';
 import { cache } from './cache';
 
 // ============================================
@@ -17,6 +17,7 @@ export interface User {
   name?: string;
   phone?: string;
   avatar?: string;
+  photo?: string;
   addresses: Address[];
   favoriteRestaurants: string[];
   notificationsEnabled?: boolean;
@@ -67,9 +68,84 @@ export interface AuthState {
 // Auth Service
 // ============================================
 class AuthService {
+  private secureStoreAvailable: boolean | null = null;
+  private refreshPromise: Promise<string | null> | null = null;
+
+  private normalizeUser(user: Partial<User> | null | undefined): User | null {
+    if (!user || !user.id || !user.email) {
+      return null;
+    }
+
+    const photo = user.photo || user.avatar;
+    return {
+      ...user,
+      name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      phone: user.phone || '',
+      photo,
+      avatar: user.avatar || photo,
+      addresses: user.addresses || [],
+      favoriteRestaurants: user.favoriteRestaurants || [],
+    } as User;
+  }
+
+  private async canUseSecureStore(): Promise<boolean> {
+    if (this.secureStoreAvailable !== null) {
+      return this.secureStoreAvailable;
+    }
+
+    const hasRequiredApi =
+      typeof SecureStore.getItemAsync === 'function' &&
+      typeof SecureStore.setItemAsync === 'function' &&
+      typeof SecureStore.deleteItemAsync === 'function';
+
+    if (!hasRequiredApi) {
+      this.secureStoreAvailable = false;
+      return false;
+    }
+
+    if (typeof SecureStore.isAvailableAsync === 'function') {
+      try {
+        this.secureStoreAvailable = await SecureStore.isAvailableAsync();
+        return this.secureStoreAvailable;
+      } catch {
+        this.secureStoreAvailable = false;
+        return false;
+      }
+    }
+
+    this.secureStoreAvailable = true;
+    return true;
+  }
+
+  private async getStoredValue(key: string): Promise<string | null> {
+    const useSecureStore = await this.canUseSecureStore();
+    if (useSecureStore) {
+      return SecureStore.getItemAsync(key);
+    }
+    return storage.getItem<string>(key);
+  }
+
+  private async setStoredValue(key: string, value: string): Promise<void> {
+    const useSecureStore = await this.canUseSecureStore();
+    if (useSecureStore) {
+      await SecureStore.setItemAsync(key, value);
+      return;
+    }
+    await storage.setItem(key, value);
+  }
+
+  private async deleteStoredValue(key: string): Promise<void> {
+    const useSecureStore = await this.canUseSecureStore();
+    if (useSecureStore) {
+      await SecureStore.deleteItemAsync(key);
+      return;
+    }
+    await storage.removeItem(key);
+  }
+
   async getAccessToken(): Promise<string | null> {
     try {
-      return await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
+      return await this.getStoredValue(STORAGE_KEYS.ACCESS_TOKEN);
     } catch (error) {
       log.error('Failed to get access token:', error);
       return null;
@@ -78,7 +154,7 @@ class AuthService {
 
   async setAccessToken(token: string): Promise<void> {
     try {
-      await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, token);
+      await this.setStoredValue(STORAGE_KEYS.ACCESS_TOKEN, token);
     } catch (error) {
       log.error('Failed to set access token:', error);
       throw error;
@@ -87,7 +163,7 @@ class AuthService {
 
   async getRefreshToken(): Promise<string | null> {
     try {
-      return await SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
+      return await this.getStoredValue(STORAGE_KEYS.REFRESH_TOKEN);
     } catch (error) {
       log.error('Failed to get refresh token:', error);
       return null;
@@ -96,7 +172,7 @@ class AuthService {
 
   async setRefreshToken(token: string): Promise<void> {
     try {
-      await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, token);
+      await this.setStoredValue(STORAGE_KEYS.REFRESH_TOKEN, token);
     } catch (error) {
       log.error('Failed to set refresh token:', error);
       throw error;
@@ -105,19 +181,57 @@ class AuthService {
 
   async clearTokens(): Promise<void> {
     try {
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.USER);
+      await this.deleteStoredValue(STORAGE_KEYS.ACCESS_TOKEN);
+      await this.deleteStoredValue(STORAGE_KEYS.REFRESH_TOKEN);
+      await this.deleteStoredValue(STORAGE_KEYS.USER);
+      await this.deleteStoredValue(STORAGE_KEYS.AUTH_TOKEN);
     } catch (error) {
       log.error('Failed to clear tokens:', error);
     }
   }
 
+  async refreshAccessToken(): Promise<string | null> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const refreshToken = await this.getRefreshToken();
+        if (!refreshToken) {
+          return null;
+        }
+
+        const response = await api.post('/auth/refresh', { refreshToken });
+        const data = response.data?.data || response.data;
+        const nextAccessToken = data?.accessToken;
+
+        if (!nextAccessToken) {
+          throw new Error('Refresh token response missing access token');
+        }
+
+        await this.setAccessToken(nextAccessToken);
+        return nextAccessToken;
+      } catch (error) {
+        log.error('Failed to refresh access token:', error);
+        await this.clearTokens();
+        return null;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
   async getStoredUser(): Promise<User | null> {
     try {
-      const userJson = await SecureStore.getItemAsync(STORAGE_KEYS.USER);
-      if (userJson) {
-        return JSON.parse(userJson);
+      const userJson = await this.getStoredValue(STORAGE_KEYS.USER);
+      if (typeof userJson === 'string' && userJson) {
+        return this.normalizeUser(JSON.parse(userJson));
+      }
+      if (userJson && typeof userJson === 'object') {
+        return this.normalizeUser(userJson as unknown as User);
       }
       return null;
     } catch (error) {
@@ -128,7 +242,7 @@ class AuthService {
 
   async setStoredUser(user: User): Promise<void> {
     try {
-      await SecureStore.setItemAsync(STORAGE_KEYS.USER, JSON.stringify(user));
+      await this.setStoredValue(STORAGE_KEYS.USER, JSON.stringify(user));
     } catch (error) {
       log.error('Failed to set stored user:', error);
       throw error;
@@ -156,12 +270,10 @@ class AuthService {
       const response = await api.post('/auth/login', credentials);
       const data = response.data.data || response.data;
 
-      const user: User = {
-        ...data.user,
-        name: data.user.name || `${data.user.firstName || ''} ${data.user.lastName || ''}`.trim(),
-        addresses: data.user.addresses || [],
-        favoriteRestaurants: data.user.favoriteRestaurants || [],
-      };
+      const user = this.normalizeUser(data.user);
+      if (!user) {
+        throw new Error('Réponse utilisateur invalide');
+      }
 
       const tokens: AuthTokens = {
         accessToken: data.accessToken || data.token,
@@ -183,7 +295,7 @@ class AuthService {
       if (error.response?.status === 401) {
         throw new Error('Email ou mot de passe incorrect');
       }
-      throw new Error('Erreur de connexion. Veuillez réessayer.');
+      throw new Error(getApiErrorMessage(error, 'Erreur de connexion. Veuillez reessayer.'));
     }
   }
 
@@ -201,12 +313,10 @@ class AuthService {
 
       const resData = response.data.data || response.data;
 
-      const user: User = {
-        ...resData.user,
-        name: resData.user.name || `${resData.user.firstName || ''} ${resData.user.lastName || ''}`.trim(),
-        addresses: resData.user.addresses || [],
-        favoriteRestaurants: resData.user.favoriteRestaurants || [],
-      };
+      const user = this.normalizeUser(resData.user);
+      if (!user) {
+        throw new Error('Réponse utilisateur invalide');
+      }
 
       const tokens: AuthTokens = {
         accessToken: resData.accessToken || resData.token,
@@ -227,7 +337,7 @@ class AuthService {
       if (error.response?.status === 409) {
         throw new Error('Cet email est déjà utilisé');
       }
-      throw new Error('Erreur lors de l\'inscription. Veuillez réessayer.');
+      throw new Error(getApiErrorMessage(error, 'Erreur lors de l\'inscription. Veuillez reessayer.'));
     }
   }
 
@@ -247,21 +357,62 @@ class AuthService {
     } catch (error) {
       log.error('❌ [Auth] Logout error:', error);
       await this.clearTokens();
+    } finally {
+      this.refreshPromise = null;
     }
   }
 
   async updateProfile(updates: Partial<User>): Promise<User> {
     try {
       const response = await api.patch('/user/profile', updates);
-      const user = response.data.data || response.data;
+      const user = this.normalizeUser(response.data.data || response.data);
       const currentUser = await this.getStoredUser();
-      const updatedUser = { ...currentUser, ...user };
+      const updatedUser = this.normalizeUser({ ...currentUser, ...user });
+      if (!updatedUser) {
+        throw new Error('Profil mis à jour invalide');
+      }
       await this.setStoredUser(updatedUser);
       return updatedUser;
     } catch (error) {
       log.error('Failed to update profile:', error);
-      throw error;
+      throw new Error(getApiErrorMessage(error, 'Impossible de mettre a jour le profil.'));
     }
+  }
+
+  async toggleFavoriteRestaurant(restaurantId: string): Promise<string[]> {
+    try {
+      const currentUser = await this.getStoredUser();
+      if (!currentUser) {
+        throw new Error('Utilisateur non authentifie');
+      }
+
+      const currentFavorites = currentUser.favoriteRestaurants || [];
+      const isFavorite = currentFavorites.includes(restaurantId);
+
+      if (isFavorite) {
+        await api.delete(`/favorites/${restaurantId}`);
+      } else {
+        await api.post('/favorites', { restaurantId });
+      }
+
+      const nextFavorites = isFavorite
+        ? currentFavorites.filter(id => id !== restaurantId)
+        : [...currentFavorites, restaurantId];
+
+      await this.setStoredUser({
+        ...currentUser,
+        favoriteRestaurants: nextFavorites,
+      });
+
+      return nextFavorites;
+    } catch (error) {
+      log.error('Failed to toggle favorite restaurant:', error);
+      throw new Error(getApiErrorMessage(error, 'Impossible de mettre a jour les favoris.'));
+    }
+  }
+
+  async getCurrentUser(): Promise<User | null> {
+    return this.getStoredUser();
   }
 }
 

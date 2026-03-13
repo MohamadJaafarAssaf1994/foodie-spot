@@ -1,5 +1,5 @@
 import { logger, consoleTransport } from 'react-native-logs';
-import config from '../constants/config';
+import config from '@/constants/config';
 
 
 const defaultConfig = {

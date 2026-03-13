@@ -1,63 +1,33 @@
 import { MapPin, Search } from 'lucide-react-native';
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { CategoryList } from '@/components/category-list';
+import { EmptyState } from '@/components/empty-state';
+import { ErrorState } from '@/components/error-state';
+import { LoadingState } from '@/components/loading-state';
 import { RestaurantCard } from '@/components/restaurant-card';
-import { restaurantAPI } from '@/services/api';
-import { locationService } from '@/services/location';
-import { Restaurant } from '@/types';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { useHomeRestaurants } from '@/hooks/use-home-restaurants';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [location, setLocation] = useState<string>('Locating...');
-
-  useEffect(() => {
-    // Fetch restaurants data
-    loadData();
-    getCurrentLocation();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const data = await restaurantAPI.getRestaurants();
-      setRestaurants(data);
-    } catch (error) {
-      // log.error("Failed to load restaurants", error);
-      Alert.alert("Error", "Failed to load restaurants");
-    }
-    finally {
-      setLoading(false);
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    const coords = await locationService.getCurrentLocation();
-    if (coords) {
-      const address = await locationService.reverseGeoCode(coords);
-      if (address) {
-        setLocation(address);
-      }
-    }
-
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+  const {
+    restaurants,
+    location,
+    loading,
+    refreshing,
+    error,
+    refreshRestaurants,
+    retryLoadRestaurants,
+  } = useHomeRestaurants();
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.locationContainer}>
           <MapPin size={20} color="#fff" />
-          <View style= {{ flex: 1}}>
+          <View style={styles.locationTextContainer}>
             <Text style={styles.locationLabel}>Livraison à </Text>
             <Text style={styles.locationText} numberOfLines={1}>{location}</Text>
           </View>
@@ -70,7 +40,7 @@ export default function HomeScreen() {
       </View>
 
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshRestaurants} />}>
          <View style={styles.promoBanner}>
           <Text style={styles.promoLabel}>Offre spéciale</Text>
           <Text style={styles.promoTitle}>-30% sur votre première commande</Text>
@@ -81,15 +51,22 @@ export default function HomeScreen() {
 
           <View style={styles.section}>
               <Text style={styles.sectionTitle}> A proximité</Text>
-              {restaurants.map((restaurant) => (
+              {loading && !refreshing && (
+                <LoadingState message="Chargement des restaurants..." />
+              )}
+
+              {!loading && !!error && (
+                <ErrorState message={error} onAction={retryLoadRestaurants} />
+              )}
+
+              {!loading && !error && restaurants.map((restaurant) => (
                 <RestaurantCard key={restaurant.id} restaurant={restaurant} onPress={() => router.push(`/restaurant/${restaurant.id}`)} />
               ))}
-              {!loading && restaurants.length === 0 && <Text style={styles.emptyText}>Aucun restaurant trouvé</Text>}
-              {/* {loading && <Text>Chargement des restaurants...</Text>} */}
+              {!loading && !error && restaurants.length === 0 && <EmptyState title="Aucun restaurant trouvé" />}
           </View>
-         
+
       </ScrollView>
-    
+
     </SafeAreaView>
   );
 
@@ -98,18 +75,21 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.light.background,
   },
   header: {
-    backgroundColor: '#FF6B35',
-    padding: 16,
+    backgroundColor: Colors.light.primary,
+    padding: Spacing.lg,
     paddingBottom: 20,
+  },
+  locationTextContainer: {
+    flex: 1,
   },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   locationLabel: {
     fontSize: 12,
@@ -123,25 +103,25 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: Spacing.md,
+    backgroundColor: Colors.light.surface,
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   searchPlaceholder: {
     flex: 1,
     fontSize: 14,
-    color: 'rgba(0, 0, 0, 0.5)',
+    color: Colors.light.textSubtle,
   },
   content : {
     flex: 1,
   },
   promoBanner: {
-    margin: 16,
-    padding: 16,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 16,
+    margin: Spacing.lg,
+    padding: Spacing.lg,
+    backgroundColor: Colors.light.secondary,
+    borderRadius: Radius.lg,
   },
   promoLabel: {
     fontSize: 10,
@@ -163,16 +143,11 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
   },
   section: {
-    padding: 16,
+    padding: Spacing.lg,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
   },
-  emptyText: {
-    color: '#666',
-    textAlign: 'center',
-  }
-
 });

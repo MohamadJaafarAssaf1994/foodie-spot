@@ -15,7 +15,15 @@ export const storage = {
     async getItem<T>(key: string): Promise<T | null> {
         try {
             const value = await AsyncStorage.getItem(key);
-            return value ? JSON.parse(value) : null;
+            if (value == null) {
+                return null;
+            }
+
+            try {
+                return JSON.parse(value) as T;
+            } catch {
+                return value as T;
+            }
         } catch (error) {
             // log.error('Error getting item', error);
             return null;

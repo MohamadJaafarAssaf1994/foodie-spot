@@ -15,6 +15,7 @@ import { ToastProvider } from '@/components/toast-provider';
 import { useOffline } from '@/hooks/use-offline';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import log from '@/services/logger';
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -36,13 +37,13 @@ function RootLayoutContent() {
     const isProtectedRoute = protectedRoutes.some(route => firstSegment === route || firstSegment?.startsWith(route));
     const isAuthRoute = firstSegment === '(auth)' || firstSegment === 'login' || firstSegment === 'register';
 
-    console.log('🛡️ [NavigationGuard]', { segment: firstSegment, isAuthenticated, isProtectedRoute, isAuthRoute });
+    log.debug('🛡️ [NavigationGuard]', { segment: firstSegment, isAuthenticated, isProtectedRoute, isAuthRoute });
 
     if (!isAuthenticated && isProtectedRoute) {
-      console.log('🔒 Redirecting to login...');
-      router.replace('/login');
+      log.info('🔒 Redirecting to login...');
+      router.replace('/(auth)/login');
     } else if (isAuthenticated && isAuthRoute) {
-      console.log('✅ Redirecting to home...');
+      log.info('✅ Redirecting to home...');
       router.replace('/(tabs)');
     }
   }, [segments, isLoading, isAuthenticated, router]);

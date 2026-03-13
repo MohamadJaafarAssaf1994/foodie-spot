@@ -1,6 +1,6 @@
 import { cache } from '@/services/cache';
 import NetInfo from '@react-native-community/netinfo';
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 import { storage, STORAGE_KEYS } from '@/services/storage';
 import { auth } from './auth'; // used to fetch token from SecureStore
@@ -17,16 +17,15 @@ const api = axios.create({
     }
 });
 
+interface RetryableRequestConfig extends InternalAxiosRequestConfig {
+    _retry?: boolean;
+}
+
+const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+
 api.interceptors.request.use(
     async requestConfig => {
-        // try getting the access token from SecureStore via auth service
-        let token: string | null = null;
-        try {
-            token = await auth.getAccessToken();
-        } catch (e) {
-            // in case auth helper fails, fallback to AsyncStorage (older key)
-            token = await storage.getItem<string>(STORAGE_KEYS.AUTH_TOKEN);
-        }
+        const token = await auth.getAccessToken();
         if (token) {
             requestConfig.headers.Authorization = `Bearer ${token}`;
         }
@@ -39,13 +38,27 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     response => response,
     async error => {
-        if (error.response && error.response.status === 401) {
-            // clear both storage locations on unauthorized
-            await storage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-            try {
-                await auth.clearTokens();
-            } catch {} // ignore
+        const requestConfig = error.config as RetryableRequestConfig | undefined;
+        const requestUrl = requestConfig?.url || '';
+        const shouldTryRefresh =
+            error.response?.status === 401 &&
+            requestConfig &&
+            !requestConfig._retry &&
+            !AUTH_EXCLUDED_PATHS.some(path => requestUrl.includes(path));
+
+        if (shouldTryRefresh) {
+            requestConfig._retry = true;
+            const nextToken = await auth.refreshAccessToken();
+            if (nextToken) {
+                requestConfig.headers = requestConfig.headers || {};
+                requestConfig.headers.Authorization = `Bearer ${nextToken}`;
+                return api(requestConfig);
+            }
         }
+
+        try {
+            await auth.clearTokens();
+        } catch {} // ignore
         return Promise.reject(error);
     }
 );
@@ -54,6 +67,38 @@ const checkConnection = async () => {
     const state = await NetInfo.fetch();
     return state.isConnected ?? false;
 }
+
+const getResponseData = <T>(response: { data?: { data?: T } & T }): T => {
+    const payload = response.data;
+    if (payload && typeof payload === 'object' && 'data' in payload) {
+        return payload.data as T;
+    }
+    return payload as T;
+};
+
+export const getApiErrorMessage = (error: unknown, fallback = 'Une erreur est survenue.'): string => {
+    if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<{ message?: string }>;
+        if (axiosError.code === 'ECONNABORTED') {
+            return 'La requete a pris trop de temps. Veuillez reessayer.';
+        }
+
+        if (!axiosError.response) {
+            return 'Impossible de contacter le serveur. Verifiez votre connexion.';
+        }
+
+        const apiMessage = axiosError.response.data?.message;
+        if (typeof apiMessage === 'string' && apiMessage.trim()) {
+            return apiMessage;
+        }
+    }
+
+    if (error instanceof Error && error.message.trim()) {
+        return error.message;
+    }
+
+    return fallback;
+};
 
 // const mockOrders: Order[] = [
 //     {
@@ -111,9 +156,8 @@ export const restaurantAPI = {
         const isConnected = await checkConnection();
 
         if (!isConnected) {
-            log.warn('Offline: Loading cached restaurants');
-            const cached = await cache.get<Restaurant[]>('restaurants');
-            return cached && cached.length > 0 ? cached : [];
+            log.warn('Offline: restaurants API is unavailable');
+            throw new Error('No network connection');
         }
 
         try {
@@ -124,14 +168,13 @@ export const restaurantAPI = {
             return restaurants;
         } catch (error) {
             log.error('Failed to fetch restaurants', error);
-            const cached = await cache.get<Restaurant[]>('restaurants');
-            return cached && cached.length > 0 ? cached : [];
+            throw error;
         }
     },
     async searchRestaurants(query: string): Promise<Restaurant[]> {
         try {
             const response = await api.get('/restaurants/search', { params: { q: query } });
-            return response.data?.data || [];
+            return getResponseData<Restaurant[]>(response) || [];
         } catch (error) {
             log.error('Failed to search restaurants', error);
             return [];
@@ -147,7 +190,7 @@ export const restaurantAPI = {
 
         try {
             const response = await api.get(`/restaurants/${id}`);
-            const restaurant = response.data?.data || null;
+            const restaurant = getResponseData<Restaurant | null>(response) || null;
             if (restaurant) {
                 await cache.set(`restaurant_${id}`, restaurant);
             }
@@ -168,8 +211,8 @@ export const restaurantAPI = {
 
         try {
             const response = await api.get(`/restaurants/${restaurantId}/menu`);
-            const menuData = response.data?.data.length ? response.data?.data : [];
-            const dishes = menuData.reduce((acc: Dish[], category: any) => {
+            const menuData = getResponseData<Array<{ items?: Dish[] }>>(response) || [];
+            const dishes = menuData.reduce((acc: Dish[], category) => {
                 if (category.items && Array.isArray(category.items)) {
                     acc.push(...category.items);
                 }
@@ -185,48 +228,6 @@ export const restaurantAPI = {
     }
 }
 
-export const userAPI = {
-
-    async login(email: string, password: string): Promise<{ user: User; token: string }> {
-        try {
-            const response = await api.post('/auth/login', { email, password });
-            const { user, token } = response.data;
-            await storage.setItem(STORAGE_KEYS.USER, user);
-            await storage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-            log.info('User logged in successfully');
-            return { user, token };
-     } catch (error) {
-            log.error('Login failed', error);
-            throw error;
-        }
-    },
-
-    async getCurrentUser(): Promise<User | null> {
-        return await storage.getItem(STORAGE_KEYS.USER);
-    },
-    async toggleFavorite(restaurantId: string) {
-    },
-    async updateProfile(updates: Partial<User>): Promise<User> {
-        try {
-            const response = await api.patch('/user/profile', updates);
-            const user = response.data.data || response.data;
-            await storage.setItem(STORAGE_KEYS.USER, user);
-            return user;
-        } catch (error) {
-            log.error('Failed to update profile', error);
-            throw error;
-        }
-    },
-    async logout(): Promise<void> {
-        await storage.removeItem(STORAGE_KEYS.USER);
-        await storage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-        await cache.clearAll();
-        log.info('User logged out, cache cleared');
-    }
-
-}
-
-
 export const orderAPI = {
     async getOrders(): Promise<Order[]> {
         const isConnected = await checkConnection();
@@ -238,7 +239,7 @@ export const orderAPI = {
 
         try {
             const response = await api.get('/orders');
-            const orders = response.data?.data || response.data || [];
+            const orders = getResponseData<Order[]>(response) || [];
             await cache.set('orders', orders);
             return orders;
         } catch (error) {
@@ -257,7 +258,7 @@ export const orderAPI = {
 
         try {
             const response = await api.get(`/orders/${id}`);
-            const order = response.data?.data || response.data || null;
+            const order = getResponseData<Order | null>(response) || null;
             if (order) {
                 await cache.set(`order_${id}`, order);
             }
@@ -265,6 +266,40 @@ export const orderAPI = {
         } catch (error) {
             // log.error(`Failed to fetch order ${id}`, error);
             return (await cache.get<Order>(`order_${id}`)) || null;
+        }
+    },
+    async syncOfflineOrders(): Promise<{ synced: number; failed: number }> {
+        const offlineOrders = await storage.getItem<Order[]>(STORAGE_KEYS.OFFLINE_ORDERS);
+        if (!offlineOrders || offlineOrders.length === 0) {
+            return { synced: 0, failed: 0 };
+        }
+
+        try {
+            const response = await api.post('/sync/orders', { offlineOrders });
+            const result = getResponseData<{
+                synced: number;
+                failed: number;
+                failedOrders?: Array<{ id?: string }>;
+            }>(response);
+
+            const failedIds = new Set((result.failedOrders || []).map(order => order.id).filter(Boolean));
+            const remainingOrders = failedIds.size > 0
+                ? offlineOrders.filter(order => failedIds.has(order.id))
+                : [];
+
+            if (remainingOrders.length > 0) {
+                await storage.setItem(STORAGE_KEYS.OFFLINE_ORDERS, remainingOrders);
+            } else {
+                await storage.removeItem(STORAGE_KEYS.OFFLINE_ORDERS);
+            }
+
+            return {
+                synced: result.synced || 0,
+                failed: result.failed || 0,
+            };
+        } catch (error) {
+            log.error('Failed to sync offline orders', error);
+            throw error;
         }
     },
 }

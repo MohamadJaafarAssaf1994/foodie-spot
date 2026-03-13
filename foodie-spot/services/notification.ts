@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import log from './logger';
 
 // Types
 export interface PushToken {
@@ -19,6 +20,15 @@ export interface NotificationPreferences {
     promotions: boolean;
     sound: boolean;
 }
+
+export interface NotificationState {
+    pushToken: PushToken | null;
+    preferences: NotificationPreferences;
+    badgeCount: number;
+    scheduled: Notifications.NotificationRequest[];
+}
+
+export type NotificationPayload = Record<string, unknown>;
 
 // Constants
 
@@ -55,7 +65,7 @@ export const notifications = {
         const isSimulator = !Device.isDevice;
 
         if (isSimulator) {
-            console.log('Running on simulator - local notifications will work, but push tokens require a physical device');
+            log.info('Running on simulator - local notifications will work, but push tokens require a physical device');
         }
         const {status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
@@ -66,7 +76,7 @@ export const notifications = {
         }
 
         if ( finalStatus !== 'granted') {
-            console.warn('Push permission not granted');
+            log.warn('Push permission not granted');
             return null;
         }
 
@@ -83,7 +93,7 @@ export const notifications = {
             };
             
             await AsyncStorage.setItem(KEYS.PUSH_TOKEN, JSON.stringify(mockToken));
-            console.log('Simulator mode: Using mock token.');
+            log.info('Simulator mode: Using mock token.');
             return mockToken;
         }
 
@@ -103,7 +113,7 @@ export const notifications = {
             return pushToken;
             
          } catch (error) {
-            console.error('Get push token error:', error);
+            log.error('Get push token error:', error);
             return null;
          }
     },
@@ -123,13 +133,13 @@ export const notifications = {
         const stored = await AsyncStorage.getItem(KEYS.PUSH_TOKEN);
         return stored ? JSON.parse(stored) : null;
     },
-    async send(title: string, body: string, data?: Record<string, any>): Promise<string>{
+    async send(title: string, body: string, data?: NotificationPayload): Promise<string>{
         return Notifications.scheduleNotificationAsync({
             content: { title, body, data: data || {}, sound: 'default'},
             trigger: null,
         })
     },
-    async schedule(title: string, body: string, date: Date, data?: Record<string, any>): Promise<string> {
+    async schedule(title: string, body: string, date: Date, data?: NotificationPayload): Promise<string> {
          return Notifications.scheduleNotificationAsync({
             content: { title, body, data: data || {}, sound: 'default'},
             trigger: {type: Notifications.SchedulableTriggerInputTypes.DATE, date},
@@ -142,7 +152,7 @@ export const notifications = {
          reminderDate.setHours(9, 0, 0, 0);
 
          if (reminderDate <= new Date()) {
-            console.warn('Reminder date is in the past');
+            log.warn('Reminder date is in the past');
             return '';
          }
 
@@ -181,18 +191,33 @@ export const notifications = {
      async savePreferences(prefs: NotificationPreferences): Promise<void> {
        await AsyncStorage.setItem(KEYS.PREFERENCES, JSON.stringify(prefs));
     },
+    async getState(): Promise<NotificationState> {
+        const [pushToken, preferences, badgeCount, scheduled] = await Promise.all([
+            this.getToken(),
+            this.getPreferences(),
+            this.getBadge(),
+            this.getScheduled(),
+        ]);
+
+        return {
+            pushToken,
+            preferences,
+            badgeCount,
+            scheduled,
+        };
+    },
     
     setupListeners(
         onReceived?: (notification: Notifications.Notification) => void,
         onTapped?: (response: Notifications.NotificationResponse) => void
     ): () => void {
         const receivedSub = Notifications.addNotificationReceivedListener((n) => {
-            console.log('Notification received:', n);
+            log.info('Notification received:', n);
             onReceived?.(n);
         });
 
         const responseSub = Notifications.addNotificationResponseReceivedListener((r) => {
-            console.log('Notification tapped:', r);
+            log.info('Notification tapped:', r);
             onTapped?.(r);
         });
 

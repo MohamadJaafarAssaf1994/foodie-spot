@@ -1,34 +1,29 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
+import { LoadingState } from "@/components/loading-state";
 import { RestaurantCard } from "@/components/restaurant-card";
 import { Colors } from "@/constants/theme";
-import { restaurantAPI } from "@/services/api";
-import { Restaurant, SearchFilters } from "@/types";
+import { useRestaurantSearch } from "@/hooks/use-restaurant-search";
 import { Filter, Search } from "lucide-react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SearchScreen() {
     const router = useRouter();
-    const [query, setQuery] = useState('');
-    const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-    const [filters, setFilters] = useState<SearchFilters>({});
-    const [showFilters, setShowFilters] = useState(false);
-
-    useEffect(() => {
-        loadRestaurants();
-    }, [query, filters]);
-
-    const loadRestaurants = async () => {
-        if (query) {
-            const data = await restaurantAPI.searchRestaurants(query);
-            setRestaurants(data);
-        } else {
-            const data = await restaurantAPI.getRestaurants(filters);
-            setRestaurants(data);
-        }
-    };
+    const {
+        query,
+        restaurants,
+        filters,
+        showFilters,
+        loading,
+        error,
+        setQuery,
+        toggleFilters,
+        toggleCuisineFilter,
+    } = useRestaurantSearch();
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -42,7 +37,7 @@ export default function SearchScreen() {
                         onChangeText={setQuery}
                     />
                 </View>
-                <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(!showFilters)}>
+                <TouchableOpacity style={styles.filterButton} onPress={toggleFilters}>
                     <Filter size={24} color={Colors.light.text} />
                 </TouchableOpacity>
             </View>
@@ -53,7 +48,7 @@ export default function SearchScreen() {
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                             {['Burger', 'Pizza', 'Sushi', 'Healthy', 'Desserts'].map((cuisine) => (
                                 <TouchableOpacity key={cuisine} style={styles.filterChip}
-                                    onPress={() => setFilters({ ...filters, cuisine: filters.cuisine ? undefined : cuisine })}>
+                                    onPress={() => toggleCuisineFilter(cuisine)}>
                                     <Text style={[styles.filterChipText, filters.cuisine === cuisine && styles.filterChipTextActive]}>{cuisine}</Text>
                                 </TouchableOpacity>
                             ))}
@@ -67,9 +62,14 @@ export default function SearchScreen() {
 
                     {restaurants.length} {restaurants.length > 1 ? 'restaurants' : 'restaurant'} trouvés
                 </Text>
+                {loading ? (
+                    <LoadingState message="Chargement des restaurants..." />
+                ) : null}
+                {!loading && error ? <ErrorState message={error} /> : null}
                 {restaurants.map((restaurant) => (
                     <RestaurantCard key={restaurant.id} restaurant={restaurant} onPress={() => router.push(`/restaurant/${restaurant.id}`)} />
                 ))}
+                {!loading && !error && restaurants.length === 0 ? <EmptyState title="Aucun restaurant trouvé" /> : null}
             </ScrollView>
         </SafeAreaView>
     );

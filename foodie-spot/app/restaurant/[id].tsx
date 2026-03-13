@@ -1,43 +1,31 @@
-import { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Dish, Restaurant } from "@/types";
+import { ErrorState } from "@/components/error-state";
+import { LoadingState } from "@/components/loading-state";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { restaurantAPI, userAPI } from "@/services/api";
+import { useRestaurantDetails } from "@/hooks/use-restaurant-details";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { ArrowLeft, Clock, Heart, MapPin, Navigation, Phone, Share2, Star } from "lucide-react-native";
 import { DishCard } from "@/components/dish-card";
+import { Colors, Radius, Spacing } from "@/constants/theme";
 
 export default function RestaurantScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-    const [menu, setMenu] = useState<Dish[]>([]);
-    const [isFavorite, setIsFavorite] = useState(false);
+    const {
+        restaurant,
+        menu,
+        isFavorite,
+        loading,
+        error,
+        deliveryTimeLabel,
+        toggleFavorite,
+        shareRestaurant,
+    } = useRestaurantDetails(id);
 
-    useEffect(() => {
-        loadRestaurant();
-    }, [id]);
-
-    const loadRestaurant = async () => {
-        const restaurantData = await restaurantAPI.getRestaurantById(id);
-        const menuData = await restaurantAPI.getMenu(id);
-        setRestaurant(restaurantData);
-        setMenu(menuData);
-        setIsFavorite(restaurantData?.isFavorite || false);
-    };
-    const handleToggleFavorite = async () => {
-        try {
-            await userAPI.toggleFavorite(id);
-            setIsFavorite(!isFavorite);
-        } catch (error) {
-            Alert.alert("Error", "Failed to update favorite status");
-        }
-    };
-
-    if (!restaurant) {
+    if (loading && !restaurant) {
         return (
             <SafeAreaView style={styles.container} edges={['top']}>
-                <Text>Loading...</Text>
+                <LoadingState message="Chargement du restaurant..." />
             </SafeAreaView>
         );
     }
@@ -47,38 +35,53 @@ export default function RestaurantScreen() {
             <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: restaurant?.image }} style={styles.image} />
-                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="Retour"
+                        hitSlop={8}
+                        onPress={() => router.back()}
+                    >
                         <ArrowLeft size={24} color="rgba(0,0,0)" />
                     </TouchableOpacity>
                     <View style={styles.headerActions}>
-                        <TouchableOpacity style={styles.actionButton} onPress={handleToggleFavorite}>
-                            <Heart size={24} color={isFavorite ? '#FF6B35' : '#000'} fill={isFavorite ? '#FF6B35' : 'transparent'} />
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            accessibilityRole="button"
+                            accessibilityLabel={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                            hitSlop={8}
+                            onPress={toggleFavorite}
+                        >
+                            <Heart size={24} color={isFavorite ? Colors.light.primary : Colors.light.text} fill={isFavorite ? Colors.light.primary : 'transparent'} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionButton} onPress={handleToggleFavorite}>
-                            <Share2 size={18} color="#000" />
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            accessibilityRole="button"
+                            accessibilityLabel="Partager le restaurant"
+                            hitSlop={8}
+                            onPress={shareRestaurant}
+                        >
+                            <Share2 size={18} color={Colors.light.text} />
                         </TouchableOpacity>
                     </View>
                 </View>
                 <View style={styles.info}>
+                    {error ? <ErrorState message={error} /> : null}
                     <Text style={styles.name}>{restaurant?.name}</Text>
                     <Text style={styles.cuisine}>{restaurant?.cuisine}</Text>
                     <View style={styles.meta}>
                         <View style={styles.metaItem}>
-                            <Star size={16} color="#FFC107" fill="#FFC107" />
+                            <Star size={16} color={Colors.light.warning} fill={Colors.light.warning} />
                             <Text style={styles.metaText}>
                                 {restaurant?.rating.toFixed(1)} ({restaurant?.reviewsCount})
                             </Text>
                         </View>
                         <View style={styles.metaItem}>
-                            <Clock size={16} color="#666"/>
-                            <Text style={styles.metaText}>
-                                {typeof restaurant?.deliveryTime === 'object' && restaurant?.deliveryTime !== null
-                                    ? `${(restaurant.deliveryTime as { min: number; max: number }).min}-${(restaurant.deliveryTime as { min: number; max: number }).max}` 
-                                    : restaurant?.deliveryTime} min
-                            </Text>
+                            <Clock size={16} color={Colors.light.textMuted}/>
+                            <Text style={styles.metaText}>{deliveryTimeLabel}</Text>
                         </View>
                          <View style={styles.metaItem}>
-                            <MapPin size={16} color="#666"/>
+                            <MapPin size={16} color={Colors.light.textMuted}/>
                             <Text style={styles.metaText}>
                                 {restaurant?.distance} km
                             </Text>
@@ -90,7 +93,7 @@ export default function RestaurantScreen() {
                             <Text style={styles.primaryButtonText}>Itinéraire</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.secondaryButton}>
-                            <Phone size={18} color="#666" />
+                            <Phone size={18} color={Colors.light.textMuted} />
                             <Text style={styles.secondaryButtonText}>Appeler</Text>
                         </TouchableOpacity>
                     </View>
@@ -112,7 +115,7 @@ export default function RestaurantScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: Colors.light.background,
         marginTop: -50,
     },
     imageContainer: {
@@ -127,32 +130,33 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 50,
         left: 16,
-        borderRadius: 20,
-        backgroundColor: '#fff',
+        width: 44,
+        height: 44,
+        borderRadius: Radius.pill,
+        backgroundColor: Colors.light.surface,
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
     },
     headerActions: {
         position: 'absolute',
         top: 16,
         right: 16,
         flexDirection: 'row',
-        gap: 8,
+        gap: Spacing.sm,
     },
     actionButton: {
         marginTop: 34,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#fff',
+        width: 48,
+        height: 48,
+        borderRadius: Radius.pill,
+        backgroundColor: Colors.light.surface,
         alignItems: 'center',
         justifyContent: 'center',
     },
     info: {
-        padding: 16,
+        padding: Spacing.lg,
         borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        borderBottomColor: Colors.light.border,
     },
     name: {
         fontSize: 24,
@@ -161,13 +165,13 @@ const styles = StyleSheet.create({
     },
     cuisine: {
         fontSize: 16,
-        color: '#666',
+        color: Colors.light.textMuted,
         marginBottom: 12,
     },
     meta: {
         flexDirection: 'row',
-        gap: 16,
-        marginBottom: 16,
+        gap: Spacing.lg,
+        marginBottom: Spacing.lg,
     },
     metaItem: {
         flexDirection: 'row',
@@ -176,11 +180,11 @@ const styles = StyleSheet.create({
     },
     metaText: {
         fontSize: 14,
-        color: '#666',
+        color: Colors.light.text,
     },
     actions: {
         flexDirection: 'row',
-        gap: 12,
+        gap: Spacing.md,
     },
     primaryButton: {
         flex: 1,
@@ -188,8 +192,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        backgroundColor: '#FF6B35',
-        borderRadius: 12,
+        backgroundColor: Colors.light.primary,
+        borderRadius: Radius.md,
     },
     primaryButtonText: {
         color: '#fff',
@@ -202,17 +206,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        backgroundColor: '#F5F5F5',
-        borderRadius: 12,
-        padding: 12,
+        backgroundColor: Colors.light.surfaceMuted,
+        borderRadius: Radius.md,
+        padding: Spacing.md,
     },
     secondaryButtonText: {
-        color: '#666',
+        color: Colors.light.text,
         fontSize: 16,
         fontWeight: '600',
     },
     menu: {
-        padding: 16,
+        padding: Spacing.lg,
     },
     menuTitle: {
         fontSize: 18,

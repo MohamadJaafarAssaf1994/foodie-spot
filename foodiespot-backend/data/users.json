@@ -1,1 +1,150 @@
-[]
+[
+  {
+    "id": "bb970c94-dc51-4341-8ba8-37f46c03e75a",
+    "email": "a@a.com",
+    "password": "123456",
+    "firstName": "a",
+    "lastName": "a",
+    "phone": "",
+    "avatar": "",
+    "addresses": [],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T13:19:40.087Z"
+  },
+  {
+    "id": "e86eff9e-66ee-4245-adaa-7e0203513a2e",
+    "email": "a@com",
+    "password": "123456",
+    "firstName": "a",
+    "lastName": "a",
+    "phone": "",
+    "avatar": "",
+    "addresses": [],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T13:20:45.173Z"
+  },
+  {
+    "id": "af5107ed-976d-436a-9edd-96427ac1f831",
+    "email": "mohassaf@test.com",
+    "firstName": "mohassaf",
+    "lastName": "Demo",
+    "phone": "",
+    "avatar": "",
+    "addresses": [
+      {
+        "id": "9cad3a91-a7cf-48bc-97b9-38e19f30c334",
+        "label": "Maison",
+        "street": "123 Rue de Paris",
+        "city": "Paris",
+        "postalCode": "75001",
+        "country": "France",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "isDefault": true
+      }
+    ],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T13:28:09.875Z",
+    "password": "123456789"
+  },
+  {
+    "id": "06108ee5-2529-4b3f-b6ee-dd5e76622ef8",
+    "email": "mohassaf@gmail.com",
+    "password": "123456",
+    "firstName": "mohamad",
+    "lastName": "assaf",
+    "phone": "",
+    "avatar": "",
+    "addresses": [],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T13:30:17.735Z"
+  },
+  {
+    "id": "4612477f-754e-493c-b7d6-612242c5dbe1",
+    "email": "sa@A.com",
+    "firstName": "sa",
+    "lastName": "Demo",
+    "phone": "",
+    "avatar": "",
+    "addresses": [
+      {
+        "id": "d4962283-ded9-4d81-9be4-0883dafd3a89",
+        "label": "Maison",
+        "street": "123 Rue de Paris",
+        "city": "Paris",
+        "postalCode": "75001",
+        "country": "France",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "isDefault": true
+      }
+    ],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T13:48:29.948Z",
+    "password": "asdsadasd"
+  },
+  {
+    "id": "770ea0df-620e-475f-84ab-1216fb1806c3",
+    "email": "dsdsa@sda.com",
+    "firstName": "dsdsa",
+    "lastName": "Demo",
+    "phone": "",
+    "avatar": "",
+    "addresses": [
+      {
+        "id": "7f6cd63b-56f8-407d-becf-b278a4d9b333",
+        "label": "Maison",
+        "street": "123 Rue de Paris",
+        "city": "Paris",
+        "postalCode": "75001",
+        "country": "France",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "isDefault": true
+      }
+    ],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T14:24:40.540Z",
+    "password": "sadasdasd"
+  },
+  {
+    "id": "55d89e1a-6fd4-45ba-a80c-abf18c232177",
+    "email": "ali@gmail.com",
+    "password": "123456",
+    "firstName": "ali",
+    "lastName": "assaf",
+    "phone": "",
+    "avatar": "",
+    "addresses": [],
+    "notificationsEnabled": true,
+    "preferences": {
+      "theme": "system",
+      "language": "fr"
+    },
+    "createdAt": "2026-03-12T14:27:15.252Z"
+  }
+]

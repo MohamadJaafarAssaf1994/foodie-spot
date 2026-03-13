@@ -6,6 +6,7 @@ import { useNotifications } from '@/hooks/use-notifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 export default function NotificationScreen() {
 
      const router = useRouter();
@@ -19,7 +20,6 @@ export default function NotificationScreen() {
         initialize,
         send,
         schedule,
-        scheduled,
         badgeCount,
         setBadgeCount,
         clearBadge,
@@ -56,11 +56,11 @@ export default function NotificationScreen() {
 
     const handleSendImmediate = async () => {
         try {
-            const id = await send(
+            const notificationId = await send(
                 'Test Notification',
                 'Ceci est une notification de test immediate !',
             );
-            addTestResult(`✅ Notification envoyée (ID: ${id.substring(0, 8)}...`);
+            addTestResult(`✅ Notification envoyée (ID: ${notificationId.substring(0, 8)}...)`);
         } catch (error) {
             addTestResult(`❌ Erreur: ${error}`);
         }
@@ -72,8 +72,7 @@ export default function NotificationScreen() {
         date.setSeconds(date.getSeconds() + 5);
 
         try {
-
-            const id = await schedule(
+            await schedule(
                 'Notification Programmée',
                 'Cette notification apparaîtra dans 5 secondes',
                 date,
@@ -91,8 +90,7 @@ export default function NotificationScreen() {
         date.setSeconds(date.getSeconds() + 30);
 
         try {
-
-            const id = await schedule(
+            await schedule(
                 'Rappel de voyage',
                 'Cette notification apparaîtra dans 30 secondes',
                 date,
@@ -122,7 +120,7 @@ export default function NotificationScreen() {
 
     return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient colors={['#a855f7', '#ec4899']} style={styles.header}>
+      <LinearGradient colors={[Colors.light.gradientStart, Colors.light.gradientEnd]} style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -139,7 +137,7 @@ export default function NotificationScreen() {
             <Ionicons 
               name={isSimulator ? "phone-portrait-outline" : "phone-portrait"} 
               size={20} 
-              color={isSimulator ? "#f59e0b" : "#10b981"} 
+              color={isSimulator ? Colors.light.warning : Colors.light.success} 
             />
             <Text style={styles.statusText}>
               {isSimulator ? 'Simulateur' : 'Appareil physique'}
@@ -149,7 +147,7 @@ export default function NotificationScreen() {
             <Ionicons 
               name={hasPermission ? "checkmark-circle" : "close-circle"} 
               size={20} 
-              color={hasPermission ? "#10b981" : "#ef4444"} 
+              color={hasPermission ? Colors.light.success : Colors.light.error} 
             />
             <Text style={styles.statusText}>
               Permissions: {hasPermission ? 'Accordées' : 'Non accordées'}
@@ -244,7 +242,7 @@ export default function NotificationScreen() {
           
           {testResults.length === 0 ? (
             <View style={styles.emptyResults}>
-              <Ionicons name="document-text-outline" size={48} color="#9ca3af" />
+              <Ionicons name="document-text-outline" size={48} color={Colors.light.textSubtle} />
               <Text style={styles.emptyText}>Aucun résultat pour le moment</Text>
               <Text style={styles.emptySubtext}>
                 Utilisez les boutons ci-dessus pour tester les notifications
@@ -264,7 +262,7 @@ export default function NotificationScreen() {
         {/* Info Box */}
         {isSimulator && (
           <View style={styles.infoBox}>
-            <Ionicons name="information-circle" size={20} color="#3b82f6" />
+            <Ionicons name="information-circle" size={20} color={Colors.light.info} />
             <Text style={styles.infoText}>
               Mode simulateur: Les notifications locales fonctionnent, mais les push tokens Expo nécessitent un appareil physique.
             </Text>
@@ -278,12 +276,12 @@ export default function NotificationScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f9fafb',
+        backgroundColor: Colors.light.background,
     },
     header: {
-        paddingHorizontal: 24,
-        paddingTop: 16,
-        paddingBottom: 24,
+        paddingHorizontal: Spacing.xl,
+        paddingTop: Spacing.lg,
+        paddingBottom: Spacing.xl,
         borderBottomLeftRadius: 32,
         borderBottomRightRadius: 32,
     },
@@ -296,7 +294,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        backgroundColor: 'rgba(255, 255, 255, 0.18)',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -310,13 +308,13 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        padding: 24,
+        padding: Spacing.xl,
     },
     statusCard: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
+        backgroundColor: Colors.light.surface,
+        borderRadius: Radius.lg,
         padding: 20,
-        marginBottom: 24,
+        marginBottom: Spacing.xl,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -331,34 +329,34 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 14,
-        color: '#111827',
+        color: Colors.light.text,
         fontWeight: '500',
     },
     tokenContainer: {
         marginTop: 12,
         paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
+        borderTopColor: Colors.light.border,
     },
     tokenLabel: {
         fontSize: 12,
-        color: '#6b7280',
+        color: Colors.light.textSubtle,
         marginBottom: 4,
     },
     tokenText: {
         fontSize: 11,
-        color: '#111827',
+        color: Colors.light.text,
         fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     },
     badgeContainer: {
         marginTop: 12,
         paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
+        borderTopColor: Colors.light.border,
     },
     badgeLabel: {
         fontSize: 14,
-        color: '#111827',
+        color: Colors.light.text,
         fontWeight: '500',
     },
     scheduledContainer: {
@@ -366,10 +364,10 @@ const styles = StyleSheet.create({
     },
     scheduledLabel: {
         fontSize: 14,
-        color: '#6b7280',
+        color: Colors.light.textSubtle,
     },
     section: {
-        marginBottom: 24,
+        marginBottom: Spacing.xl,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -380,7 +378,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#111827',
+        color: Colors.light.text,
         marginBottom: 16,
     },
     button: {
@@ -389,24 +387,24 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 14,
         paddingHorizontal: 20,
-        borderRadius: 12,
+        borderRadius: Radius.md,
         marginBottom: 12,
         gap: 8,
     },
     buttonPrimary: {
-        backgroundColor: '#a855f7',
+        backgroundColor: Colors.light.primary,
     },
     buttonSuccess: {
-        backgroundColor: '#10b981',
+        backgroundColor: Colors.light.success,
     },
     buttonInfo: {
-        backgroundColor: '#3b82f6',
+        backgroundColor: Colors.light.secondary,
     },
     buttonWarning: {
-        backgroundColor: '#f59e0b',
+        backgroundColor: Colors.light.warning,
     },
     buttonDanger: {
-        backgroundColor: '#ef4444',
+        backgroundColor: Colors.light.error,
     },
     buttonSmall: {
         flex: 1,
@@ -415,7 +413,7 @@ const styles = StyleSheet.create({
     },
     buttonRow: {
         flexDirection: 'row',
-        gap: 12,
+        gap: Spacing.md,
     },
     buttonText: {
         color: '#fff',
@@ -428,48 +426,48 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     resultsContainer: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
+        backgroundColor: Colors.light.surface,
+        borderRadius: Radius.md,
         padding: 16,
         maxHeight: 300,
     },
     resultItem: {
         paddingVertical: 8,
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: Colors.light.border,
     },
     resultText: {
         fontSize: 12,
-        color: '#111827',
+        color: Colors.light.text,
         fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     },
     emptyResults: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
+        backgroundColor: Colors.light.surface,
+        borderRadius: Radius.md,
         padding: 32,
         alignItems: 'center',
     },
     emptyText: {
         fontSize: 16,
-        color: '#6b7280',
+        color: Colors.light.textSubtle,
         marginTop: 12,
         fontWeight: '500',
     },
     emptySubtext: {
         fontSize: 14,
-        color: '#9ca3af',
+        color: Colors.light.textSubtle,
         marginTop: 4,
         textAlign: 'center',
     },
     clearButton: {
-        color: '#a855f7',
+        color: Colors.light.primary,
         fontSize: 14,
         fontWeight: '600',
     },
     infoBox: {
         flexDirection: 'row',
-        backgroundColor: '#dbeafe',
-        borderRadius: 12,
+        backgroundColor: Colors.light.surfaceMuted,
+        borderRadius: Radius.md,
         padding: 16,
         gap: 12,
         marginBottom: 24,
@@ -477,7 +475,7 @@ const styles = StyleSheet.create({
     infoText: {
         flex: 1,
         fontSize: 14,
-        color: '#1e40af',
+        color: Colors.light.info,
         lineHeight: 20,
     },
 });

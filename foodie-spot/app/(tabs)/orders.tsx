@@ -1,34 +1,14 @@
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
+import { LoadingState } from "@/components/loading-state";
 import { OrderCard } from "@/components/order-card";
-import { orderAPI } from "@/services/api";
-import { Order } from "@/types";
+import { useOrders } from "@/hooks/use-orders";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OrdersScreen() {
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-
-    useEffect(() => {
-        loadOrders();
-    }, []);
-
-    const loadOrders = async () => {
-        try {
-            const data = await orderAPI.getOrders();
-            setOrders(data);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const onRefresh = async () => {
-        setRefreshing(true);
-        await loadOrders();
-        setRefreshing(false);
-    }
+    const { orders, loading, refreshing, error, refreshOrders, retryLoadOrders } = useOrders();
 
 
     return (
@@ -38,15 +18,20 @@ export default function OrdersScreen() {
             </View>
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false} refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                <RefreshControl refreshing={refreshing} onRefresh={refreshOrders} />
             }>
-                {orders.length === 0 && !loading ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyIcon}>ICON</Text>
-                        <Text style={styles.emptyText}>Aucune commande trouvée.</Text>
-                    </View>
+                {loading && !refreshing ? (
+                    <LoadingState message="Chargement des commandes..." />
+                ) : null}
+
+                {!loading && error ? (
+                    <ErrorState message={error} onAction={retryLoadOrders} />
+                ) : null}
+
+                {!loading && !error && orders.length === 0 ? (
+                    <EmptyState icon="📦" title="Aucune commande trouvée." />
                 ) : (
-                    orders.map((order) => (
+                    !error && orders.map((order) => (
                         <OrderCard
                             key={order.id}
                             order={order}
@@ -82,17 +67,4 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 16,
     },
-    emptyState: {
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 80,
-    },
-    emptyIcon: {
-        fontSize: 64,
-        marginBottom: 16,
-    },
-    emptyText: {
-        fontSize: 16,
-        color: '#999',
-    }
 });
