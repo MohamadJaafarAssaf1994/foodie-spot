@@ -99,7 +99,6 @@ export function useRestaurantSearch() {
         ? {
             lat: coords.latitude,
             lng: coords.longitude,
-            radius: 5,
             sortBy: 'distance' as const,
           }
         : undefined;

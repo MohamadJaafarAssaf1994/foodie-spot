@@ -3,19 +3,19 @@ import { Alert } from 'react-native';
 import { ToastOptions, ToastType } from '@/types';
 
 const toast = {
-    success: (message: string, options?: ToastOptions) => {
+    success: (message: string, _options?: ToastOptions) => {
         Alert.alert("✅ Succès", message);
     },
-    error: (message: string, options?: ToastOptions) => {
+    error: (message: string, _options?: ToastOptions) => {
         Alert.alert("❌ Erreur", message);
     },
-    info: (message: string, options?: ToastOptions) => {
+    info: (message: string, _options?: ToastOptions) => {
         Alert.alert("ℹ️ Info", message);
     },
-    warning: (message: string, options?: ToastOptions) => {
+    warning: (message: string, _options?: ToastOptions) => {
         Alert.alert("⚠️ Attention", message);
     },
-    show: (message: string,  type: ToastType = 'info', options?: ToastOptions) => {
+    show: (message: string,  type: ToastType = 'info', _options?: ToastOptions) => {
         const titles : Record<ToastType, string> = {
             success: "✅ Succès",
             error: "❌ Erreur",

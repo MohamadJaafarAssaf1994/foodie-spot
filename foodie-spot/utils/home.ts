@@ -5,10 +5,9 @@ export interface HomeCoordinates {
   longitude: number;
 }
 
-export const buildNearbyRestaurantFilters = (coords: HomeCoordinates, radius = 5): SearchFilters => ({
+export const buildNearbyRestaurantFilters = (coords: HomeCoordinates): SearchFilters => ({
   lat: coords.latitude,
   lng: coords.longitude,
-  radius,
   sortBy: 'distance',
 });
 

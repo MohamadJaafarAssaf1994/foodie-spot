@@ -66,6 +66,17 @@ const tests: TestCase[] = [
           lastName: 'Doe',
           email: 'jane@example.com',
           password: 'secret123',
+          confirmPassword: '',
+        }),
+        'validation_password_mismatch'
+      );
+
+      assert.equal(
+        validateRegisterForm({
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: 'jane@example.com',
+          password: 'secret123',
           confirmPassword: 'secret456',
         }),
         'validation_password_mismatch'
@@ -122,7 +133,6 @@ const tests: TestCase[] = [
         {
           lat: 48.8566,
           lng: 2.3522,
-          radius: 5,
           sortBy: 'distance',
         }
       );

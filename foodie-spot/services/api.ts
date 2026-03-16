@@ -5,10 +5,10 @@ import axios, { InternalAxiosRequestConfig } from 'axios';
 import { storage, STORAGE_KEYS } from '@/services/storage';
 import type { User as AuthUser } from '@/services/auth';
 import { auth } from './auth'; // used to fetch token from SecureStore
-import { CartValidationResult, Category, Dish, Order, OrderTrackingData, ProfileStats, PromoBanner, PromoValidationResult, Restaurant, RestaurantReviewsResponse, RestaurantReviewStats, RestaurantReview, SearchFilters, User } from '@/types';
+import { CartValidationResult, Category, Dish, Order, OrderTrackingData, ProfileStats, PromoBanner, PromoValidationResult, Restaurant, RestaurantReviewsResponse, RestaurantReviewStats, RestaurantReview, SearchFilters } from '@/types';
 import log from './logger';
 import config from '@/constants/config';
-import { getApiErrorMessage, getRemainingOfflineOrders, getResponseData } from './api-utils';
+import { getRemainingOfflineOrders, getResponseData } from './api-utils';
 
 
 const api = axios.create({
@@ -171,55 +171,6 @@ const checkConnection = async () => {
     const state = await NetInfo.fetch();
     return state.isConnected ?? false;
 }
-
-// const mockOrders: Order[] = [
-//     {
-//         id: 'o1',
-//         restaurantId: 'r1',
-//         restaurantName: 'Bistro Parisien',
-//         items: [
-//             {
-//                 dish: mockMenus['r1'][0],
-//                 quantity: 2,
-//             },
-//             { dish: mockMenus['r1'][3], quantity: 1 },
-//         ],
-//         total: 35.00,
-//         deliveryFee: 3.50,
-//         status: 'delivered',
-//         createdAt: new Date(Date.now() - 86400 * 1000),
-//         estimatedDeliveryTime: new Date(Date.now() - 3600 * 1000),
-//         deliveryAddress: '15 avenue des Champs-Élysées, Paris, France',
-//         driverInfo: {
-//             name: 'Jean Dupont',
-//             phone: '+33 6 12 34 56 78',
-//             photo: 'https://randomuser.me/api/portraits/men/32.jpg',
-//         },
-//     },
-//     {
-//         id: 'o2',
-//         restaurantId: 'r2',
-//         restaurantName: 'Tokyo Roll',
-//         items: [
-//             {
-//                 dish: mockMenus['r2'][0],
-//                 quantity: 1,
-//             },
-//             { dish: mockMenus['r2'][4], quantity: 1 },
-//         ],
-//         total: 26.00,
-//         deliveryFee: 3.50,
-//         status: 'on-the-way',
-//         createdAt: new Date(Date.now() - 7200 * 1000),
-//         estimatedDeliveryTime: new Date(Date.now() + 1800 * 1000),
-//         deliveryAddress: '15 avenue des Champs-Élysées, Paris, France',
-//         driverInfo: {
-//             name: 'Sophie Martin',
-//             phone: '+33 6 87 65 43 21',
-//             photo: 'https://randomuser.me/api/portraits/women/44.jpg',
-//         },
-//     }
-// ];
 
 // APIs
 export const restaurantAPI = {

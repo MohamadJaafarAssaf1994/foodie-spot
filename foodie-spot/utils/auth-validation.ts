@@ -107,7 +107,7 @@ export const validateRegisterFields = ({
     fieldErrors.password = 'validation_password_too_short';
   }
 
-  if (confirmPassword && password !== confirmPassword) {
+  if (!confirmPassword || password !== confirmPassword) {
     fieldErrors.confirmPassword = 'validation_password_mismatch';
   }
 
