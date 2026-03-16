@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const storage = {
-    // value can be any serialisable object; we stringify here to avoid AsyncStorage warnings
-    async setItem(key: string, value: any): Promise<void> {
+    // Values can be strings or serialisable objects; stringify non-strings before storing.
+    async setItem<T>(key: string, value: T): Promise<void> {
         try {
             const str = typeof value === 'string' ? value : JSON.stringify(value);
             await AsyncStorage.setItem(key, str);
@@ -67,6 +67,8 @@ export const STORAGE_KEYS = {
     CART: 'cart',
     FAVORITES: 'favorites',
     RECENT_SEARCHES: 'recentSearches',
+    ONBOARDING_SEEN: 'onboardingSeen',
+    THEME_MODE: 'themeMode',
     CACHED_RESTAURANTS: 'cachedRestaurants',
     OFFLINE_ORDERS: 'offlineOrders',
 };

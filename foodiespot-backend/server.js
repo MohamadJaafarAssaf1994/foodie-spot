@@ -4,6 +4,7 @@ import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 import jwt from "jsonwebtoken";
@@ -18,10 +19,26 @@ const __dirname = path.dirname(__filename);
 // ===========================================
 const PORT = process.env.PORT || 4000;
 const NODE_ENV = process.env.NODE_ENV || "development";
-const JWT_SECRET = process.env.JWT_SECRET || "foodiespot-super-secret-jwt-key-change-in-production";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "foodiespot-super-secret-refresh-key-change-in-production";
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || "1h";
 const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || "7d";
+
+const resolveSecret = (name) => {
+  const value = process.env[name];
+  if (value && value.trim()) {
+    return value;
+  }
+
+  if (NODE_ENV === "production") {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  const generated = crypto.randomBytes(48).toString("hex");
+  console.warn(`[security] ${name} is missing. Using a temporary in-memory secret for ${NODE_ENV}.`);
+  return generated;
+};
+
+const JWT_SECRET = resolveSecret("JWT_SECRET");
+const JWT_REFRESH_SECRET = resolveSecret("JWT_REFRESH_SECRET");
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR 
   ? path.resolve(__dirname, process.env.UPLOADS_DIR) 
@@ -51,6 +68,29 @@ function loadJSON(filename) {
 function saveJSON(filename, data) {
   const filepath = path.join(DATA_DIR, filename);
   fs.writeFileSync(filepath, JSON.stringify(data, null, 2), "utf8");
+}
+
+function formatReverseGeocodeLabel(address) {
+  if (!address || typeof address !== "object") {
+    return null;
+  }
+
+  const values = [
+    address.road,
+    address.neighbourhood,
+    address.suburb,
+    address.city,
+    address.town,
+    address.village,
+    address.state,
+    address.country,
+  ].filter(Boolean);
+
+  const uniqueValues = [...new Set(values)];
+  const shortLabel = uniqueValues.slice(0, 2).join(", ");
+  const fullLabel = uniqueValues.join(", ");
+
+  return shortLabel || fullLabel || null;
 }
 
 // Charger les données
@@ -296,6 +336,31 @@ app.get("/users/profile", authenticateToken, (req, res) => {
   }
   const { password: _, ...userWithoutPassword } = user;
   res.json({ success: true, data: userWithoutPassword });
+});
+
+app.get("/users/profile/stats", authenticateToken, (req, res) => {
+  const user = users.find(u => u.id === req.user.userId);
+  if (!user) {
+    return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+  }
+
+  const userOrders = orders.filter(order => order.userId === req.user.userId);
+  const userReviews = reviews.filter(review => review.userId === req.user.userId);
+  const userFavorites = favorites[req.user.userId] || [];
+
+  const averageRating = userReviews.length > 0
+    ? Math.round((userReviews.reduce((sum, review) => sum + review.rating, 0) / userReviews.length) * 10) / 10
+    : 0;
+
+  res.json({
+    success: true,
+    data: {
+      ordersCount: userOrders.length,
+      favoritesCount: userFavorites.length,
+      reviewsCount: userReviews.length,
+      averageRating,
+    }
+  });
 });
 
 app.put("/users/profile", authenticateToken, (req, res) => {
@@ -859,6 +924,48 @@ app.get("/restaurants/:id", optionalAuth, (req, res) => {
   res.json({ success: true, data: result });
 });
 
+app.get("/geo/reverse", async (req, res) => {
+  const { lat, lng } = req.query;
+
+  if (!lat || !lng) {
+    return res.status(400).json({ success: false, message: "lat et lng requis" });
+  }
+
+  try {
+    const searchParams = new URLSearchParams({
+      lat: String(lat),
+      lon: String(lng),
+      format: "jsonv2",
+      addressdetails: "1",
+    });
+
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${searchParams.toString()}`, {
+      headers: {
+        "User-Agent": "FoodieSpot/1.0 (reverse-geocoding)",
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ success: false, message: "Reverse geocoding failed" });
+    }
+
+    const data = await response.json();
+    const label = formatReverseGeocodeLabel(data.address) || data.display_name || null;
+
+    return res.json({
+      success: true,
+      data: {
+        label,
+        raw: data.address || null,
+      },
+    });
+  } catch (error) {
+    console.error("Reverse geocoding error:", error);
+    return res.status(500).json({ success: false, message: "Unable to reverse geocode coordinates" });
+  }
+});
+
 app.get("/restaurants/:id/menu", (req, res) => {
   const menu = menus[req.params.id];
   
@@ -867,6 +974,32 @@ app.get("/restaurants/:id/menu", (req, res) => {
   }
 
   res.json({ success: true, data: menu });
+});
+
+app.get("/dishes/:id", (req, res) => {
+  const { restaurantId } = req.query;
+
+  if (restaurantId && menus[restaurantId]) {
+    const restaurantDish = menus[restaurantId]
+      .flatMap(category => category.items.map(item => ({ ...item, restaurantId })))
+      .find(item => item.id === req.params.id);
+
+    if (restaurantDish) {
+      return res.json({ success: true, data: restaurantDish });
+    }
+  }
+
+  const allDishes = Object.entries(menus).flatMap(([currentRestaurantId, menu]) =>
+    menu.flatMap(category => category.items.map(item => ({ ...item, restaurantId: currentRestaurantId })))
+  );
+
+  const dish = allDishes.find(item => item.id === req.params.id);
+
+  if (!dish) {
+    return res.status(404).json({ success: false, message: "Plat non trouvé" });
+  }
+
+  res.json({ success: true, data: dish });
 });
 
 app.get("/restaurants/:id/reviews", (req, res) => {
@@ -1446,7 +1579,12 @@ app.post("/reviews", authenticateToken, upload.array("images", 5), (req, res) =>
   }
 
   const user = users.find(u => u.id === req.user.userId);
-  const images = req.files ? req.files.map(f => `${req.protocol}://${req.get("host")}/uploads/${f.filename}`) : [];
+  const uploadedImages = req.files ? req.files.map(f => `${req.protocol}://${req.get("host")}/uploads/${f.filename}`) : [];
+  const images = uploadedImages.length > 0
+    ? uploadedImages
+    : Array.isArray(req.body.images)
+      ? req.body.images.filter(image => typeof image === "string")
+      : [];
 
   const newReview = {
     id: uuidv4(),
@@ -1736,6 +1874,18 @@ app.post("/promos/validate", authenticateToken, (req, res) => {
       maxDiscount: promo.maxDiscount,
       message: discountDisplay,
       validUntil: promo.validUntil
+    }
+  });
+});
+
+app.get("/promos/featured", optionalAuth, (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      code: "BIENVENUE30",
+      title: "30% off your first order",
+      discountLabel: "-30%",
+      description: "Use this welcome code on eligible orders."
     }
   });
 });

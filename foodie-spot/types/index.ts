@@ -30,6 +30,25 @@ export interface SearchFilters {
     rating?: number;
     deliveryTime?: number;
     isOpen?: boolean;
+    lat?: number;
+    lng?: number;
+    radius?: number;
+    sortBy?: 'distance' | 'rating' | 'deliveryTime' | 'popularity';
+    search?: string;
+}
+export interface PromoBanner {
+    code: string;
+    title: string;
+    discountLabel: string;
+    description?: string;
+}
+export interface Category {
+    id: string;
+    name: string;
+    slug: string;
+    icon?: string;
+    image?: string;
+    restaurantCount?: number;
 }
 export interface Dish {
     id: string;
@@ -51,6 +70,11 @@ export interface CartItem {
     specialInstructions?: string;
 }
 
+export interface CartTotals {
+    subtotal: number;
+    itemCount: number;
+}
+
 export interface User {
     id: string;
     name: string;
@@ -59,6 +83,13 @@ export interface User {
     photo?: string;
     addresses: Address[];
     favoriteRestaurants: string[];
+}
+
+export interface ProfileStats {
+    ordersCount: number;
+    favoritesCount: number;
+    reviewsCount: number;
+    averageRating: number;
 }
 
 export interface Address {
@@ -93,6 +124,120 @@ export interface Order {
             longitude: number;
         };
     };
+}
+
+export interface OrderTimelineEntry {
+    status: string;
+    timestamp: string;
+    message: string;
+}
+
+export interface OrderTrackingStep {
+    key: string;
+    label: string;
+    completed: boolean;
+    time?: string;
+}
+
+export interface OrderTrackingDriver {
+    id: string;
+    name: string;
+    phone: string;
+    photo?: string;
+    vehicle?: string;
+    rating?: number;
+    totalDeliveries?: number;
+}
+
+export interface OrderTrackingLocation {
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    speed?: number;
+    updatedAt?: string;
+}
+
+export interface OrderTrackingData {
+    orderId: string;
+    orderNumber?: string;
+    status: string;
+    timeline: OrderTimelineEntry[];
+    estimatedDelivery?: string;
+    estimatedArrival?: string;
+    estimatedMinutes?: number;
+    restaurant: {
+        id: string;
+        name: string;
+        image?: string;
+        phone: string;
+        location?: {
+            latitude: number;
+            longitude: number;
+            address: string;
+        };
+    } | null;
+    deliveryAddress: string;
+    driver?: OrderTrackingDriver;
+    driverLocation?: OrderTrackingLocation;
+    steps?: OrderTrackingStep[];
+}
+
+export interface CartValidationResult {
+    items: Array<{
+        menuItemId: string;
+        quantity: number;
+        name: string;
+        price: number;
+        totalPrice: number;
+    }>;
+    subtotal: number;
+    deliveryFee: number;
+    serviceFee: number;
+    total: number;
+    freeDeliveryThreshold: number;
+    amountForFreeDelivery: number;
+}
+
+export interface PromoValidationResult {
+    valid: boolean;
+    code: string;
+    type: 'percent' | 'fixed' | 'delivery';
+    description?: string;
+    minOrder?: number;
+    maxDiscount?: number;
+    discountAmount?: number;
+    discountDisplay?: string;
+    message?: string;
+    validUntil?: string;
+}
+
+export interface RestaurantReview {
+    id: string;
+    userId: string;
+    userName: string;
+    userAvatar?: string;
+    restaurantId: string;
+    orderId?: string;
+    rating: number;
+    qualityRating?: number | null;
+    speedRating?: number | null;
+    presentationRating?: number | null;
+    comment: string;
+    images: string[];
+    likes: number;
+    isVerifiedPurchase: boolean;
+    createdAt: string;
+}
+
+export interface RestaurantReviewStats {
+    total: number;
+    average: number;
+    distribution: Record<number, number>;
+}
+
+export interface RestaurantReviewsResponse {
+    reviews: RestaurantReview[];
+    stats: RestaurantReviewStats;
 }
 
 export interface ToastMessage {

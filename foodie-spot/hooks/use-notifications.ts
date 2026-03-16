@@ -10,62 +10,75 @@ export const useNotifications = (
     const [pushToken, setPushToken] = useState<PushToken | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [hasPermission, setHasPermission] = useState(false);
+    const [permissionStatus, setPermissionStatus] = useState<Notifications.PermissionStatus>(Notifications.PermissionStatus.UNDETERMINED);
     const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
     const [scheduled, setScheduled] = useState<Notifications.NotificationRequest[]>([]);
     const [badgeCount, setBadgeCount] = useState(0);
+    const [isDevice, setIsDevice] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const cleanupRef = useRef<(() => void) | null>(null);
 
-    useEffect(() => {
-        loadData();
-        setupListeners();
-        return () => cleanupRef.current?.();
-    }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
+            setError(null);
             const state = await notifications.getState();
             setPushToken(state.pushToken);
             setPreferences(state.preferences);
             setBadgeCount(state.badgeCount);
             setScheduled(state.scheduled);
-            setHasPermission(!!state.pushToken);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const setupListeners = () => {
-        cleanupRef.current = notifications.setupListeners(
-            (n) => onReceived?.(n),
-            (r) => onTapped?.(r.notification.request.content.data)
-        );
-    };
-
-    const initialize = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const token = await notifications.initialize();
-            if (token) {
-                setPushToken(token);
-                setHasPermission(true);
-            }
-            return token;
-
+            setPermissionStatus(state.permissionStatus);
+            setIsDevice(state.isDevice);
+            setHasPermission(state.permissionStatus === 'granted');
+        } catch (loadError) {
+            setError(loadError instanceof Error ? loadError.message : 'Unable to load notifications state.');
         } finally {
             setIsLoading(false);
         }
     }, []);
+
+    const setupListeners = useCallback(() => {
+        cleanupRef.current = notifications.setupListeners(
+            (n) => onReceived?.(n),
+            (r) => onTapped?.(r.notification.request.content.data)
+        );
+    }, [onReceived, onTapped]);
+
+    useEffect(() => {
+        void loadData();
+        setupListeners();
+        return () => cleanupRef.current?.();
+    }, [loadData, setupListeners]);
+
+    const initialize = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            setError(null);
+            const token = await notifications.initialize();
+            await loadData();
+            setPushToken(token);
+            return token;
+        } catch (initError) {
+            setError(initError instanceof Error ? initError.message : 'Unable to initialize notifications.');
+            return null;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [loadData]);
 
     const send = useCallback((title: string, body: string, data?: NotificationPayload) => {
         return notifications.send(title, body, data);
     }, []);
 
+    const refreshScheduled = useCallback(async () => {
+        await loadData();
+    }, [loadData]);
+
     const schedule = useCallback(async (title: string, body: string, date: Date, data?: NotificationPayload) => {
         const id = await notifications.schedule(title, body, date, data);
         await refreshScheduled();
         return id;
-    }, []);
+    }, [refreshScheduled]);
 
 
 
@@ -73,18 +86,18 @@ export const useNotifications = (
         const id_ = await notifications.scheduleTripReminder(id, title, date);
         await refreshScheduled();
         return id_;
-    }, []);
+    }, [refreshScheduled]);
 
 
     const cancel = useCallback(async (id: string) => {
         await notifications.cancel(id);
         await refreshScheduled();
-    }, []);
+    }, [refreshScheduled]);
 
     const cancelAll = useCallback(async () => {
         await notifications.cancelAll();
-        await setScheduled([]);
-    }, []);
+        await refreshScheduled();
+    }, [refreshScheduled]);
 
     const updatePreferences = useCallback(async (updates: Partial<NotificationPreferences>) => {
         const current = preferences || await notifications.getPreferences();
@@ -104,22 +117,16 @@ export const useNotifications = (
     }, []);
 
 
-    const refreshScheduled = useCallback(async () => {
-        const state = await notifications.getState();
-        setScheduled(state.scheduled);
-        setBadgeCount(state.badgeCount);
-        setPreferences(state.preferences);
-        setPushToken(state.pushToken);
-        setHasPermission(!!state.pushToken);
-    }, []);
-
     return {
         pushToken,
         isLoading,
         hasPermission,
+        permissionStatus,
         preferences,
         scheduled,
         badgeCount,
+        isDevice,
+        error,
         initialize,
         send,
         schedule,

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { Colors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/theme-context';
 
 interface ErrorStateProps {
   message: string;
@@ -13,12 +14,14 @@ export function ErrorState({
   actionLabel = 'Réessayer',
   onAction,
 }: ErrorStateProps) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
-      <Text style={styles.message}>{message}</Text>
+      <Text style={[styles.message, { color: colors.error }]}>{message}</Text>
       {onAction ? (
         <TouchableOpacity onPress={onAction}>
-          <Text style={styles.action}>{actionLabel}</Text>
+          <Text style={[styles.action, { color: colors.primary }]}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -32,11 +35,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
   },
   message: {
-    color: Colors.light.error,
     textAlign: 'center',
   },
   action: {
-    color: Colors.light.primary,
     fontWeight: '700',
   },
 });

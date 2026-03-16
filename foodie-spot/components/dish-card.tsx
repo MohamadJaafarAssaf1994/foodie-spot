@@ -1,6 +1,10 @@
 import { Dish } from "@/types";
+import { AppImages } from "@/constants/assets";
+import { localizeDishDescription } from "@/constants/content-translations";
+import { useI18n } from "@/contexts/i18n-context";
 import { Image } from "expo-image";
 import { Plus } from "lucide-react-native";
+import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Props {
@@ -8,15 +12,24 @@ interface Props {
     onPress?: () => void;
 }
 
-export const DishCard: React.FC<Props> = ({ dish, onPress }) => {
+const DishCardComponent: React.FC<Props> = ({ dish, onPress }) => {
+    const { locale } = useI18n();
+    const description = localizeDishDescription(dish.id, dish.description, locale);
     return (
         <TouchableOpacity style={styles.card} onPress={onPress}>
             <View style={styles.imageContainer}>
-                <Image source={{ uri: dish.image }} style={styles.image} />
+                <Image
+                    source={dish.image ? { uri: dish.image } : AppImages.imagePlaceholder}
+                    placeholder={AppImages.imagePlaceholder}
+                    cachePolicy="memory-disk"
+                    contentFit="cover"
+                    transition={150}
+                    style={styles.image}
+                />
             </View>
             <View style={styles.info}>
                 <Text style={styles.name}>{dish.name}</Text>
-                <Text style={styles.description} numberOfLines={2}>{dish.description}</Text>
+                <Text style={styles.description} numberOfLines={2}>{description}</Text>
                 <Text style={styles.price}>{dish.price} €</Text>
             </View>
             <View style={styles.addButton}>
@@ -25,6 +38,8 @@ export const DishCard: React.FC<Props> = ({ dish, onPress }) => {
         </TouchableOpacity>
     );
 }
+
+export const DishCard = React.memo(DishCardComponent);
 
 const styles = StyleSheet.create({
     card: {

@@ -5,6 +5,7 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { storage, STORAGE_KEYS } from '@/services/storage';
 import { orderAPI } from '@/services/api';
 import log from '@/services/logger';
+import type { Order } from '@/types';
 
 interface OfflineState {
   isOnline: boolean;
@@ -21,7 +22,7 @@ export function useOffline() {
 
   const checkPendingActions = useCallback(async () => {
     try {
-      const offlineOrders = await storage.getItem<any[]>(STORAGE_KEYS.OFFLINE_ORDERS);
+      const offlineOrders = await storage.getItem<Order[]>(STORAGE_KEYS.OFFLINE_ORDERS);
       setState(prev => ({
         ...prev,
         pendingCount: offlineOrders?.length || 0,

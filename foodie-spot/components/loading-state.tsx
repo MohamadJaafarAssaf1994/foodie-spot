@@ -1,6 +1,7 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Spacing } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/theme-context';
 
 interface LoadingStateProps {
   message?: string;
@@ -9,12 +10,14 @@ interface LoadingStateProps {
 
 export function LoadingState({
   message = 'Chargement...',
-  color = Colors.light.primary,
+  color,
 }: LoadingStateProps) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={color} />
-      <Text style={styles.message}>{message}</Text>
+      <ActivityIndicator size="large" color={color || colors.primary} />
+      <Text style={[styles.message, { color: colors.textMuted }]}>{message}</Text>
     </View>
   );
 }

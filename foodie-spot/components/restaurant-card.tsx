@@ -1,9 +1,13 @@
 import { Restaurant } from '@/types';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { localizeRestaurantDescription } from '@/constants/content-translations';
 import { Image } from 'expo-image';
 import { Clock, MapPin, Star } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppImages } from '@/constants/assets';
+import { useI18n } from '@/contexts/i18n-context';
+import { useAppTheme } from '@/contexts/theme-context';
 
 
 interface Props {
@@ -12,7 +16,11 @@ interface Props {
     compact?: boolean;
 }
 
-export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }) => {
+const RestaurantCardComponent: React.FC<Props> = ({ restaurant, onPress, compact }) => {
+    const { locale } = useI18n();
+    const { colors } = useAppTheme();
+    const description = localizeRestaurantDescription(restaurant.id, restaurant.description, locale);
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
     return (
         <TouchableOpacity
             style={[styles.card, compact && styles.compact]}
@@ -21,7 +29,14 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
             activeOpacity={0.85}
             onPress={onPress}
         >
-            <Image source={{ uri: restaurant.image }} style={[styles.image, compact && styles.compactImage]} />
+            <Image
+                source={{ uri: restaurant.image }}
+                placeholder={AppImages.imagePlaceholder}
+                cachePolicy="memory-disk"
+                contentFit="cover"
+                transition={150}
+                style={[styles.image, compact && styles.compactImage]}
+            />
 
             <View style={styles.content}>
                 <View style={styles.header}>
@@ -34,11 +49,11 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
                 <Text style={styles.cuisine}>{restaurant.cuisine}</Text>
                 <View style={styles.meta}>
                     <View style={styles.metaItem}>
-                        <Star size={16} color={Colors.light.primary} />
+                        <Star size={16} color={colors.primary} />
                         <Text style={styles.metaText}>{restaurant.rating} {restaurant.reviewsCount} avis</Text>
                     </View>
                     <View style={styles.metaItem}>
-                        <Clock size={16} color={Colors.light.primary} />
+                        <Clock size={16} color={colors.primary} />
                         <Text style={styles.metaText}>
                             {typeof restaurant.deliveryTime === 'object' 
                                 ? `${restaurant.deliveryTime.min}-${restaurant.deliveryTime.max}` 
@@ -47,10 +62,10 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
                     </View>
 
                     <View style={styles.metaItem}>
-                        <MapPin size={16} color={Colors.light.primary} />
+                        <MapPin size={16} color={colors.primary} />
                         <Text style={styles.metaText}>{restaurant.distance ?? 15} km</Text>
                     </View>
-                    {!compact && <Text style={styles.description} numberOfLines={2}>{restaurant.description}</Text>}
+                    {!compact && <Text style={styles.description} numberOfLines={2}>{description}</Text>}
 
                 </View>
             </View>
@@ -61,12 +76,14 @@ export const RestaurantCard: React.FC<Props> = ({ restaurant, onPress, compact }
     );
 }
 
+export const RestaurantCard = React.memo(RestaurantCardComponent);
 
-const styles = StyleSheet.create({
+
+const createStyles = (colors: typeof Colors.light) => StyleSheet.create({
     card: {
         flexDirection: 'row',
         marginBottom: Spacing.lg,
-        backgroundColor: Colors.light.surface,
+        backgroundColor: colors.surface,
         borderRadius: Radius.lg,
         overflow: 'hidden',
         shadowColor: '#000',
@@ -103,18 +120,18 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     badge: {
-        backgroundColor: Colors.light.surfaceMuted,
+        backgroundColor: colors.surfaceMuted,
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: Radius.sm,
     },
     badgeText: {
-        color: Colors.light.primary,
+        color: colors.primary,
         fontSize: 12,
         fontWeight: '600',
     },
     cuisine: {
-        color: Colors.light.textMuted,
+        color: colors.textMuted,
         fontSize: 13
     },
     meta: {
@@ -129,11 +146,11 @@ const styles = StyleSheet.create({
     },
     metaText: {
         fontSize: 12,
-        color: Colors.light.text,
+        color: colors.text,
     },
 
     description: {
         fontSize: 12,
-        color: Colors.light.textMuted,
+        color: colors.textMuted,
     }
 });

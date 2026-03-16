@@ -1,23 +1,38 @@
-import { Coffee, IceCream2, Pizza, Sandwich, UtensilsCrossed } from 'lucide-react-native';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const categories = [
-    { label: 'Burger', icon: <Sandwich size={18} color="#FF6B35" /> },
-    { label: 'Pizza', icon: <Pizza size={18} color="#FF6B35" /> },
-    { label: 'Sushi', icon: <UtensilsCrossed size={18} color="#FF6B35" /> },
-    { label: 'Healthy', icon: <Coffee size={18} color="#FF6B35" /> },
-    { label: 'Desserts', icon: <IceCream2 size={18} color="#FF6B35" /> },
-];
+import { localizeCategoryName } from '@/constants/content-translations';
+import { Colors } from '@/constants/theme';
+import { useI18n } from '@/contexts/i18n-context';
+import { useAppTheme } from '@/contexts/theme-context';
+import { Category } from '@/types';
 
-export const CategoryList: React.FC = () => {
+interface Props {
+    categories: Category[];
+    selectedCategory?: string | null;
+    onSelectCategory: (categoryName: string | null) => void;
+    title: string;
+}
+
+const CategoryListComponent: React.FC<Props> = ({ categories, selectedCategory, onSelectCategory, title }) => {
+    const { colors } = useAppTheme();
+    const { locale } = useI18n();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
+
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Catégories</Text>
+            <Text style={styles.title}>{title}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {categories.map((category) => (
-                    <TouchableOpacity key={category.label} style={styles.chip}>
-                        {category.icon}
-                        <Text style={styles.chipText}>{category.label}</Text>
+                    <TouchableOpacity
+                        key={category.id}
+                        style={[styles.chip, selectedCategory === category.name && styles.chipActive]}
+                        onPress={() => onSelectCategory(selectedCategory === category.name ? null : category.name)}
+                    >
+                        {category.icon ? <Text style={styles.chipEmoji}>{category.icon}</Text> : null}
+                        <Text style={[styles.chipText, selectedCategory === category.name && styles.chipTextActive]}>
+                            {localizeCategoryName(category, locale)}
+                        </Text>
                     </TouchableOpacity>
                 ))}
             </ScrollView>
@@ -25,7 +40,9 @@ export const CategoryList: React.FC = () => {
     );
 };
 
-const styles = StyleSheet.create({
+export const CategoryList = React.memo(CategoryListComponent);
+
+const createStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
         paddingHorizontal: 16,
         paddingVertical: 12,
@@ -33,20 +50,30 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '700',
+        color: colors.text,
         marginBottom: 12,
     },
     chip: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: '#FFF4EF',
+        backgroundColor: colors.surfaceMuted,
         paddingHorizontal: 14,
         paddingVertical: 10,
         borderRadius: 18,
         marginRight: 12,
     },
+    chipActive: {
+        backgroundColor: colors.primary,
+    },
+    chipEmoji: {
+        fontSize: 16,
+    },
     chipText: {
-        color: '#FF6B35',
+        color: colors.primary,
         fontWeight: '600',
-    }
+    },
+    chipTextActive: {
+        color: '#fff',
+    },
 });

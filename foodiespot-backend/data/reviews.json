@@ -1,0 +1,19 @@
+[
+  {
+    "id": "056ca0d4-9d0f-4824-bbbf-750c3b860a0b",
+    "userId": "c79b56f0-8fd0-4cd4-a3ac-646d37af1000",
+    "userName": "ali assaf",
+    "userAvatar": "",
+    "restaurantId": "r2",
+    "orderId": "ec66637f-f019-454a-ba3c-7b3962ceb564",
+    "rating": 5,
+    "qualityRating": null,
+    "speedRating": null,
+    "presentationRating": null,
+    "comment": "sdfsadfasdf",
+    "images": [],
+    "likes": 0,
+    "isVerifiedPurchase": true,
+    "createdAt": "2026-03-16T14:56:08.912Z"
+  }
+]

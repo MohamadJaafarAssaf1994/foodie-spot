@@ -1,12 +1,14 @@
 import { cache } from '@/services/cache';
 import NetInfo from '@react-native-community/netinfo';
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 
 import { storage, STORAGE_KEYS } from '@/services/storage';
+import type { User as AuthUser } from '@/services/auth';
 import { auth } from './auth'; // used to fetch token from SecureStore
-import { Dish, Order, Restaurant, SearchFilters, User } from '@/types';
+import { CartValidationResult, Category, Dish, Order, OrderTrackingData, ProfileStats, PromoBanner, PromoValidationResult, Restaurant, RestaurantReviewsResponse, RestaurantReviewStats, RestaurantReview, SearchFilters, User } from '@/types';
 import log from './logger';
 import config from '@/constants/config';
+import { getApiErrorMessage, getRemainingOfflineOrders, getResponseData } from './api-utils';
 
 
 const api = axios.create({
@@ -21,7 +23,103 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
     _retry?: boolean;
 }
 
+type ApiOrderItem = {
+    quantity: number;
+    menuItemId?: string;
+    totalPrice?: number;
+    name?: string;
+    price?: number;
+    menuItem?: {
+        id?: string;
+        name?: string;
+        description?: string;
+        price?: number;
+        image?: string;
+        category?: string;
+        isAvailable?: boolean;
+    };
+    dish?: Dish;
+};
+
+type ApiOrder = Omit<Order, 'items' | 'deliveryAddress' | 'createdAt' | 'estimatedDeliveryTime'> & {
+    items?: ApiOrderItem[];
+    deliveryAddress?: string | {
+        street?: string;
+        city?: string;
+        postalCode?: string;
+        country?: string;
+    };
+    createdAt: string | Date;
+    estimatedDeliveryTime?: string | Date;
+    estimatedDelivery?: string | Date;
+};
+
+const DISH_IMAGE_FALLBACKS: Record<string, string> = {
+    d12: 'https://images.unsplash.com/photo-1615361200141-f45040f367be?w=400',
+    t3: 'https://images.unsplash.com/photo-1552332386-f8dd00dc2f85?w=400',
+    ts1: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=400',
+    gb3: 'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?w=400',
+    gs1: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400',
+    gs2: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+    gj1: 'https://images.unsplash.com/photo-1622597467836-f3285f2131b8?w=400',
+    gj2: 'https://images.unsplash.com/photo-1505252585461-04db1eb84625?w=400',
+};
+
 const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+
+const formatDeliveryAddress = (address: ApiOrder['deliveryAddress']): string => {
+    if (typeof address === 'string') {
+        return address;
+    }
+
+    if (!address) {
+        return '';
+    }
+
+    return [address.street, address.city, address.postalCode, address.country]
+        .filter(Boolean)
+        .join(', ');
+};
+
+const normalizeOrderItem = (item: ApiOrderItem, restaurantId: string): Order['items'][number] => {
+    if (item.dish) {
+        return item as Order['items'][number];
+    }
+
+    const menuItem = item.menuItem;
+
+    return {
+        quantity: item.quantity,
+        dish: {
+            id: menuItem?.id || item.menuItemId || '',
+            restaurantId,
+            name: menuItem?.name || item.name || 'Item',
+            description: menuItem?.description || '',
+            price: menuItem?.price ?? item.price ?? 0,
+            image: menuItem?.image || '',
+            category: menuItem?.category || 'menu',
+            isAvailable: menuItem?.isAvailable ?? true,
+        },
+    };
+};
+
+const normalizeOrder = (order: ApiOrder): Order => ({
+    ...order,
+    items: (order.items || []).map(item => normalizeOrderItem(item, order.restaurantId)),
+    deliveryAddress: formatDeliveryAddress(order.deliveryAddress),
+    createdAt: new Date(order.createdAt),
+    estimatedDeliveryTime: order.estimatedDeliveryTime
+        ? new Date(order.estimatedDeliveryTime)
+        : order.estimatedDelivery
+            ? new Date(order.estimatedDelivery)
+            : undefined,
+});
+
+const normalizeDish = (dish: Dish, restaurantId?: string): Dish => ({
+    ...dish,
+    restaurantId: dish.restaurantId || restaurantId || '',
+    image: dish.image || DISH_IMAGE_FALLBACKS[dish.id] || '',
+});
 
 api.interceptors.request.use(
     async requestConfig => {
@@ -40,8 +138,9 @@ api.interceptors.response.use(
     async error => {
         const requestConfig = error.config as RetryableRequestConfig | undefined;
         const requestUrl = requestConfig?.url || '';
+        const status = error.response?.status;
         const shouldTryRefresh =
-            error.response?.status === 401 &&
+            status === 401 &&
             requestConfig &&
             !requestConfig._retry &&
             !AUTH_EXCLUDED_PATHS.some(path => requestUrl.includes(path));
@@ -56,9 +155,14 @@ api.interceptors.response.use(
             }
         }
 
-        try {
-            await auth.clearTokens();
-        } catch {} // ignore
+        // Only clear auth state for actual authentication failures.
+        // Business errors like invalid promo code (400) must not log the user out.
+        if (status === 401 || status === 403) {
+            try {
+                await auth.clearTokens();
+            } catch {} // ignore
+        }
+
         return Promise.reject(error);
     }
 );
@@ -67,38 +171,6 @@ const checkConnection = async () => {
     const state = await NetInfo.fetch();
     return state.isConnected ?? false;
 }
-
-const getResponseData = <T>(response: { data?: { data?: T } & T }): T => {
-    const payload = response.data;
-    if (payload && typeof payload === 'object' && 'data' in payload) {
-        return payload.data as T;
-    }
-    return payload as T;
-};
-
-export const getApiErrorMessage = (error: unknown, fallback = 'Une erreur est survenue.'): string => {
-    if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError<{ message?: string }>;
-        if (axiosError.code === 'ECONNABORTED') {
-            return 'La requete a pris trop de temps. Veuillez reessayer.';
-        }
-
-        if (!axiosError.response) {
-            return 'Impossible de contacter le serveur. Verifiez votre connexion.';
-        }
-
-        const apiMessage = axiosError.response.data?.message;
-        if (typeof apiMessage === 'string' && apiMessage.trim()) {
-            return apiMessage;
-        }
-    }
-
-    if (error instanceof Error && error.message.trim()) {
-        return error.message;
-    }
-
-    return fallback;
-};
 
 // const mockOrders: Order[] = [
 //     {
@@ -171,9 +243,9 @@ export const restaurantAPI = {
             throw error;
         }
     },
-    async searchRestaurants(query: string): Promise<Restaurant[]> {
+    async searchRestaurants(query: string, filters?: Pick<SearchFilters, 'lat' | 'lng' | 'radius' | 'sortBy'>): Promise<Restaurant[]> {
         try {
-            const response = await api.get('/restaurants/search', { params: { q: query } });
+            const response = await api.get('/restaurants/search', { params: { q: query, ...filters } });
             return getResponseData<Restaurant[]>(response) || [];
         } catch (error) {
             log.error('Failed to search restaurants', error);
@@ -206,7 +278,7 @@ export const restaurantAPI = {
 
         if (!isConnected) {
             const cached = await cache.get<Dish[]>(`menu_${restaurantId}`);
-            return cached || [];
+            return (cached || []).map(dish => normalizeDish(dish, restaurantId));
         }
 
         try {
@@ -214,7 +286,7 @@ export const restaurantAPI = {
             const menuData = getResponseData<Array<{ items?: Dish[] }>>(response) || [];
             const dishes = menuData.reduce((acc: Dish[], category) => {
                 if (category.items && Array.isArray(category.items)) {
-                    acc.push(...category.items);
+                    acc.push(...category.items.map(dish => normalizeDish(dish, restaurantId)));
                 }
                 return acc;
             }, []);
@@ -223,10 +295,94 @@ export const restaurantAPI = {
         } catch (error) {
             log.error(`Failed to fetch menu for restaurant ${restaurantId}`, error);
             const cached = await cache.get<Dish[]>(`menu_${restaurantId}`);
-            return cached || [];
+            return (cached || []).map(dish => normalizeDish(dish, restaurantId));
         }
-    }
+    },
+    async getDishById(id: string, restaurantId?: string): Promise<Dish | null> {
+        try {
+            const response = await api.get(`/dishes/${id}`, {
+                params: restaurantId ? { restaurantId } : undefined,
+            });
+            const payload = getResponseData<Dish | null>(response) || null;
+            const dish = payload ? normalizeDish(payload, restaurantId) : null;
+            if (dish) {
+                return dish;
+            }
+        } catch (error) {
+            log.error(`Failed to fetch dish ${id}`, error);
+        }
+
+        if (restaurantId) {
+            const menu = await this.getMenu(restaurantId);
+            return menu.find(dish => dish.id === id) || null;
+        }
+
+        return null;
+    },
 }
+
+export const categoryAPI = {
+    async getCategories(): Promise<Category[]> {
+        try {
+            const response = await api.get('/categories');
+            return getResponseData<Category[]>(response) || [];
+        } catch (error) {
+            log.error('Failed to fetch categories', error);
+            return [];
+        }
+    },
+};
+
+export const homeAPI = {
+    async getFeaturedPromo(): Promise<PromoBanner> {
+        try {
+            const response = await api.get('/promos/featured');
+            return getResponseData<PromoBanner>(response);
+        } catch (error) {
+            log.error('Failed to fetch featured promo', error);
+            return {
+                code: 'FOODIE30',
+                title: 'Special offer on your next order',
+                discountLabel: '-30%',
+            };
+        }
+    },
+};
+
+export const profileAPI = {
+    async getProfile(): Promise<AuthUser | null> {
+        try {
+            const response = await api.get('/users/profile');
+            return getResponseData<AuthUser | null>(response) || null;
+        } catch (error) {
+            log.error('Failed to fetch profile', error);
+            return null;
+        }
+    },
+    async getProfileStats(): Promise<ProfileStats> {
+        try {
+            const response = await api.get('/users/profile/stats');
+            return getResponseData<ProfileStats>(response);
+        } catch (error) {
+            log.error('Failed to fetch profile stats', error);
+            return {
+                ordersCount: 0,
+                favoritesCount: 0,
+                reviewsCount: 0,
+                averageRating: 0,
+            };
+        }
+    },
+    async getFavoriteRestaurants(): Promise<Restaurant[]> {
+        try {
+            const response = await api.get('/favorites');
+            return getResponseData<Restaurant[]>(response) || [];
+        } catch (error) {
+            log.error('Failed to fetch favorite restaurants', error);
+            return [];
+        }
+    },
+};
 
 export const orderAPI = {
     async getOrders(): Promise<Order[]> {
@@ -239,7 +395,7 @@ export const orderAPI = {
 
         try {
             const response = await api.get('/orders');
-            const orders = getResponseData<Order[]>(response) || [];
+            const orders = (getResponseData<ApiOrder[]>(response) || []).map(normalizeOrder);
             await cache.set('orders', orders);
             return orders;
         } catch (error) {
@@ -258,7 +414,8 @@ export const orderAPI = {
 
         try {
             const response = await api.get(`/orders/${id}`);
-            const order = getResponseData<Order | null>(response) || null;
+            const payload = getResponseData<ApiOrder | null>(response) || null;
+            const order = payload ? normalizeOrder(payload) : null;
             if (order) {
                 await cache.set(`order_${id}`, order);
             }
@@ -266,6 +423,15 @@ export const orderAPI = {
         } catch (error) {
             // log.error(`Failed to fetch order ${id}`, error);
             return (await cache.get<Order>(`order_${id}`)) || null;
+        }
+    },
+    async getTrackingById(id: string): Promise<OrderTrackingData | null> {
+        try {
+            const response = await api.get(`/orders/${id}/track`);
+            return getResponseData<OrderTrackingData | null>(response) || null;
+        } catch (error) {
+            log.error(`Failed to fetch tracking for order ${id}`, error);
+            return null;
         }
     },
     async syncOfflineOrders(): Promise<{ synced: number; failed: number }> {
@@ -282,10 +448,7 @@ export const orderAPI = {
                 failedOrders?: Array<{ id?: string }>;
             }>(response);
 
-            const failedIds = new Set((result.failedOrders || []).map(order => order.id).filter(Boolean));
-            const remainingOrders = failedIds.size > 0
-                ? offlineOrders.filter(order => failedIds.has(order.id))
-                : [];
+            const remainingOrders = getRemainingOfflineOrders(offlineOrders, result.failedOrders);
 
             if (remainingOrders.length > 0) {
                 await storage.setItem(STORAGE_KEYS.OFFLINE_ORDERS, remainingOrders);
@@ -302,17 +465,101 @@ export const orderAPI = {
             throw error;
         }
     },
+    async createOrder(payload: {
+        restaurantId: string;
+        items: Array<{ menuItemId: string; quantity: number }>;
+        deliveryAddress: string;
+        paymentMethod: string;
+        promoCode?: string;
+        tip?: number;
+        deliveryInstructions?: string;
+    }): Promise<Order> {
+        const response = await api.post('/orders', payload);
+        return getResponseData<Order>(response);
+    },
 }
+
+export const cartAPI = {
+    async validateCart(payload: {
+        restaurantId: string;
+        items: Array<{ menuItemId: string; quantity: number }>;
+    }): Promise<CartValidationResult> {
+        const response = await api.post('/cart/validate', payload);
+        return getResponseData<CartValidationResult>(response);
+    },
+};
+
+export const promoAPI = {
+    async validatePromo(payload: {
+        code: string;
+        subtotal: number;
+        restaurantId?: string;
+    }): Promise<PromoValidationResult> {
+        const response = await api.post('/promos/validate', payload);
+        const promo = getResponseData<{
+            code: string;
+            discount?: number | string;
+            type: 'percent' | 'fixed' | 'delivery';
+            description?: string;
+            minOrder?: number;
+            maxDiscount?: number;
+            message?: string;
+            validUntil?: string;
+        }>(response);
+
+        return {
+            valid: true,
+            code: promo.code,
+            type: promo.type,
+            description: promo.description,
+            minOrder: promo.minOrder,
+            maxDiscount: promo.maxDiscount,
+            discountAmount: typeof promo.discount === 'number' ? promo.discount : undefined,
+            discountDisplay: promo.message,
+            message: promo.message,
+            validUntil: promo.validUntil,
+        };
+    },
+};
+
+export const reviewAPI = {
+    async getRestaurantReviews(restaurantId: string): Promise<RestaurantReviewsResponse> {
+        const response = await api.get(`/restaurants/${restaurantId}/reviews`);
+        const reviews = getResponseData<RestaurantReview[]>(response) || [];
+        const stats = (response.data && typeof response.data === 'object' && 'stats' in response.data
+            ? (response.data as { stats?: RestaurantReviewStats }).stats
+            : undefined) || {
+                total: reviews.length,
+                average: reviews.length ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) * 10) / 10 : 0,
+                distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+            };
+
+        return { reviews, stats };
+    },
+    async createReview(payload: {
+        restaurantId: string;
+        orderId: string;
+        rating: number;
+        qualityRating?: number;
+        speedRating?: number;
+        presentationRating?: number;
+        comment?: string;
+        images?: string[];
+    }) {
+        return api.post('/reviews', payload);
+    },
+};
 
 export const uploadAPI = {
     async uploadImage(uri: string, type: 'profile' | 'review'): Promise<string> {
         try {
             const formData = new FormData();
-            formData.append('image', {
+            const imageFile: { uri: string; name: string; type: string } = {
                 uri,
                 name: `${type}_${Date.now()}.jpg`,
                 type: 'image/jpeg',
-            } as any);
+            };
+            formData.append('image', imageFile as unknown as Blob);
 
             const response = await api.post('/upload', formData, {
                 headers: {

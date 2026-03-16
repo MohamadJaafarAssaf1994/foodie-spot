@@ -1,9 +1,9 @@
 // app/_layout.tsx
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,10 +11,11 @@ import { Ionicons } from '@expo/vector-icons';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
+import { I18nProvider } from '@/contexts/i18n-context';
+import { ThemeProvider, useAppTheme } from '@/contexts/theme-context';
 import { ToastProvider } from '@/components/toast-provider';
 import { useOffline } from '@/hooks/use-offline';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { storage, STORAGE_KEYS } from '@/services/storage';
 import log from '@/services/logger';
 
 export const unstable_settings = {
@@ -22,50 +23,134 @@ export const unstable_settings = {
 };
 
 function RootLayoutContent() {
-  const colorScheme = useColorScheme();
+  const { colorScheme, colors } = useAppTheme();
   const { isOnline, pendingCount, isSyncing, syncNow } = useOffline();
-  const { isAuthenticated, isLoading, refreshAuth } = useAuth();
-  const segments = useSegments();
+  const { isAuthenticated, isLoading } = useAuth();
+  const pathname = usePathname();
   const router = useRouter();
+  const lastRedirectRef = useRef<string | null>(null);
+  const [isOnboardingLoading, setIsOnboardingLoading] = useState(true);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
+  const normalizedPath = useMemo(() => pathname.replace(/\/+$/, '') || '/', [pathname]);
+  const isOnboardingRoute = normalizedPath === '/onboarding';
+  const isAuthRoute = useMemo(
+    () =>
+      normalizedPath === '/(auth)' ||
+      normalizedPath.startsWith('/(auth)/') ||
+      normalizedPath === '/login' ||
+      normalizedPath === '/register',
+    [normalizedPath]
+  );
+  const isProtectedRoute = useMemo(
+    () =>
+      normalizedPath === '/' ||
+      normalizedPath.startsWith('/(tabs)') ||
+      normalizedPath === '/search' ||
+      normalizedPath === '/orders' ||
+      normalizedPath === '/profile' ||
+      normalizedPath === '/notifications' ||
+      normalizedPath === '/favorites' ||
+      normalizedPath === '/cart' ||
+      normalizedPath === '/checkout' ||
+      normalizedPath.startsWith('/restaurant/') ||
+      normalizedPath.startsWith('/order/') ||
+      normalizedPath.startsWith('/dish/') ||
+      normalizedPath.startsWith('/tracking/') ||
+      normalizedPath.startsWith('/review/'),
+    [normalizedPath]
+  );
+
+  useEffect(() => {
+    const loadOnboardingFlag = async () => {
+      const seen = await storage.getItem<boolean>(STORAGE_KEYS.ONBOARDING_SEEN);
+      setHasSeenOnboarding(Boolean(seen));
+      setIsOnboardingLoading(false);
+    };
+
+    void loadOnboardingFlag();
+  }, []);
 
   // Navigation Guard
   useEffect(() => {
-    if (isLoading) return;
-
-    const firstSegment = segments[0];
-    const protectedRoutes = ['(tabs)', 'cart', 'checkout', 'restaurant', 'dish', 'tracking', 'review'];
-    const isProtectedRoute = protectedRoutes.some(route => firstSegment === route || firstSegment?.startsWith(route));
-    const isAuthRoute = firstSegment === '(auth)' || firstSegment === 'login' || firstSegment === 'register';
-
-    log.debug('🛡️ [NavigationGuard]', { segment: firstSegment, isAuthenticated, isProtectedRoute, isAuthRoute });
-
-    if (!isAuthenticated && isProtectedRoute) {
-      log.info('🔒 Redirecting to login...');
-      router.replace('/(auth)/login');
-    } else if (isAuthenticated && isAuthRoute) {
-      log.info('✅ Redirecting to home...');
-      router.replace('/(tabs)');
+    if (isLoading || isOnboardingLoading || !normalizedPath) {
+      return;
     }
-  }, [segments, isLoading, isAuthenticated, router]);
 
-  useEffect(() => {
-    if (segments[0] === '(tabs)' && !isLoading && !isAuthenticated) {
-      refreshAuth();
-    }
-  }, [segments, isLoading, isAuthenticated, refreshAuth]);
+    let isCancelled = false;
 
-  if (isLoading) {
+    const runGuard = async () => {
+      let nextHasSeenOnboarding = hasSeenOnboarding;
+
+      // Re-check persisted onboarding state before redirecting away from auth/app routes.
+      // This avoids a stale in-memory flag sending users back to the first slide right after completion.
+      if (!nextHasSeenOnboarding && !isOnboardingRoute) {
+        const persistedSeen = await storage.getItem<boolean>(STORAGE_KEYS.ONBOARDING_SEEN);
+        if (persistedSeen) {
+          nextHasSeenOnboarding = true;
+          if (!isCancelled) {
+            setHasSeenOnboarding(true);
+          }
+        }
+      }
+
+      if (isCancelled) {
+        return;
+      }
+
+      let redirectTarget: '/login' | '/' | '/onboarding' | null = null;
+
+      if (!nextHasSeenOnboarding && !isOnboardingRoute) {
+        redirectTarget = '/onboarding';
+      } else if (nextHasSeenOnboarding && isOnboardingRoute) {
+        redirectTarget = isAuthenticated ? '/' : '/login';
+      } else if (!isAuthenticated && isProtectedRoute) {
+        redirectTarget = '/login';
+      } else if (isAuthenticated && isAuthRoute) {
+        redirectTarget = '/';
+      }
+
+      log.debug('🛡️ [NavigationGuard]', {
+        pathname: normalizedPath,
+        isAuthenticated,
+        isProtectedRoute,
+        isAuthRoute,
+        isOnboardingRoute,
+        hasSeenOnboarding: nextHasSeenOnboarding,
+        redirectTarget,
+      });
+
+      if (!redirectTarget) {
+        lastRedirectRef.current = null;
+        return;
+      }
+
+      if (normalizedPath === redirectTarget || lastRedirectRef.current === redirectTarget) {
+        return;
+      }
+
+      lastRedirectRef.current = redirectTarget;
+      router.replace(redirectTarget);
+    };
+
+    void runGuard();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [normalizedPath, isLoading, isOnboardingLoading, hasSeenOnboarding, isAuthenticated, isProtectedRoute, isAuthRoute, isOnboardingRoute, router]);
+
+  if (isLoading || isOnboardingLoading) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingLogo}>🍔</Text>
-        <ActivityIndicator size="large" color={Colors.light.tint} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <ActivityIndicator size="large" color={colors.tint} />
+        <Text style={[styles.loadingText, { color: colors.textMuted }]}>Chargement...</Text>
       </View>
     );
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       {!isOnline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={16} color="#fff" />
@@ -85,9 +170,11 @@ function RootLayoutContent() {
       )}
 
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="restaurant/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="order/[orderId]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="dish/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="cart" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="checkout" options={{ animation: 'slide_from_right' }} />
@@ -96,7 +183,7 @@ function RootLayoutContent() {
       </Stack>
 
       <StatusBar style="auto" />
-    </ThemeProvider>
+    </NavigationThemeProvider>
   );
 }
 
@@ -114,9 +201,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ToastProvider>
-        <AuthProvider>
-          <RootLayoutContent />
-        </AuthProvider>
+          <ThemeProvider>
+            <I18nProvider>
+              <AuthProvider>
+                <RootLayoutContent />
+              </AuthProvider>
+            </I18nProvider>
+          </ThemeProvider>
         </ToastProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

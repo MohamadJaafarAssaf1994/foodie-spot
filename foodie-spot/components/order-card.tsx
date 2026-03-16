@@ -1,32 +1,39 @@
 import { Order } from "@/types";
 import { Colors, Radius, Spacing } from "@/constants/theme";
 import { Check, CheckCircle, ChefHat, Clock, Navigation, X } from "lucide-react-native";
+import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useAppTheme } from '@/contexts/theme-context';
 
 interface Props {
     order: Order;
     onPress?: () => void;
 }
 
-const statusColor: Record<Order['status'],string> = {
-    'pending': Colors.light.textSubtle,
-    'preparing': Colors.light.warning,
-    'delivered': Colors.light.success,
-    'cancelled': Colors.light.error, 
-    'confirmed': Colors.light.secondary,
-    'on-the-way': Colors.light.primary,
-};
-const statusIcon: Record<Order['status'], React.ReactNode> = {
-    'pending': <Clock size={16} color={Colors.light.textSubtle} />,
-    'preparing': <ChefHat size={16} color={Colors.light.warning} />,
-    'delivered': <Check size={16} color={Colors.light.success} />,
-    'cancelled': <X size={16} color={Colors.light.error} />, 
-    'confirmed': <CheckCircle size={16} color={Colors.light.secondary} />,
-    'on-the-way': <Navigation size={16} color={Colors.light.primary} />,
-};
 
+const OrderCardComponent: React.FC<Props> = ({ order, onPress }) => {
+    const { colors } = useAppTheme();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
+    const itemNames = order.items
+        .map(item => item.dish?.name || 'Item')
+        .join(', ');
+    const statusColor: Record<Order['status'], string> = {
+        pending: colors.textSubtle,
+        preparing: colors.warning,
+        delivered: colors.success,
+        cancelled: colors.error,
+        confirmed: colors.secondary,
+        'on-the-way': colors.primary,
+    };
+    const statusIcon: Record<Order['status'], React.ReactNode> = {
+        pending: <Clock size={16} color={colors.textSubtle} />,
+        preparing: <ChefHat size={16} color={colors.warning} />,
+        delivered: <Check size={16} color={colors.success} />,
+        cancelled: <X size={16} color={colors.error} />,
+        confirmed: <CheckCircle size={16} color={colors.secondary} />,
+        'on-the-way': <Navigation size={16} color={colors.primary} />,
+    };
 
-export const OrderCard: React.FC<Props> = ({ order, onPress }) => {
     return (
         <TouchableOpacity
             style={styles.card}
@@ -44,7 +51,7 @@ export const OrderCard: React.FC<Props> = ({ order, onPress }) => {
                         </View>
                 </View>
 
-                <Text style={styles.items} numberOfLines={1}>{order.items.map(item => item.dish.name).join(', ')}</Text>
+                <Text style={styles.items} numberOfLines={1}>{itemNames}</Text>
                 <View style={styles.footer}>
                     <Text style={styles.total}>Total: {order.total} €</Text>
                     <Text style= {styles.date}>{new Date(order.createdAt).toLocaleDateString()}</Text>
@@ -53,10 +60,12 @@ export const OrderCard: React.FC<Props> = ({ order, onPress }) => {
     );
 }
 
+export const OrderCard = React.memo(OrderCardComponent);
 
-const styles = StyleSheet.create({
+
+const createStyles = (colors: typeof Colors.light) => StyleSheet.create({
     card: {
-        backgroundColor: Colors.light.surface,
+        backgroundColor: colors.surface,
         borderRadius: Radius.lg,
         padding: Spacing.lg,
         marginBottom: Spacing.md,
@@ -91,7 +100,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     items: {
-        color: Colors.light.textMuted,
+        color: colors.textMuted,
         marginBottom: 10,
     },
     footer: {
@@ -102,10 +111,10 @@ const styles = StyleSheet.create({
     total: {
         fontSize: 16,
         fontWeight: '700',
-        color: Colors.light.primary,
+        color: colors.primary,
     },
     date: {
         fontSize: 12,
-        color: Colors.light.textSubtle,
+        color: colors.textSubtle,
     }
 });

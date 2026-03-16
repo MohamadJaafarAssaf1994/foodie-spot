@@ -1,481 +1,451 @@
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import {useRouter} from 'expo-router';
-import { useEffect, useState } from 'react';
-import * as Device from 'expo-device';
-import { useNotifications } from '@/hooks/use-notifications';
-import { LinearGradient } from 'expo-linear-gradient';
-import Ionicons from "@expo/vector-icons/Ionicons";
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import { ErrorState } from '@/components/error-state';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { useI18n } from '@/contexts/i18n-context';
+import { useNotifications } from '@/hooks/use-notifications';
+
+const MAX_LOGS = 8;
+
 export default function NotificationScreen() {
+  const router = useRouter();
+  const { t } = useI18n();
+  const [testResults, setTestResults] = useState<string[]>([]);
 
-     const router = useRouter();
-    const [testResults, setTestResults] = useState<string[]>([]);
-    const isSimulator = !Device.isDevice;
+  const addTestResult = useCallback((message: string) => {
+    setTestResults(prev => {
+      const entry = `${new Date().toLocaleTimeString()}: ${message}`;
+      return [entry, ...prev].slice(0, MAX_LOGS);
+    });
+  }, []);
 
-    const {
-        pushToken,
-        isLoading,
-        hasPermission,
-        initialize,
-        send,
-        schedule,
-        badgeCount,
-        setBadgeCount,
-        clearBadge,
-        refreshScheduled,
-    } = useNotifications(
-        (notification) => {
-            addTestResult(`✅ Notification reçue: ${ notification.request.content.title }`);
-        },
-        (data) => {
-            addTestResult(`👆 Notification cliquée: ${JSON.stringify(data)}`);
-        }
-    );
+  const {
+    pushToken,
+    isLoading,
+    hasPermission,
+    permissionStatus,
+    preferences,
+    scheduled,
+    badgeCount,
+    isDevice,
+    error,
+    initialize,
+    send,
+    schedule,
+    setBadgeCount,
+    clearBadge,
+    refreshScheduled,
+  } = useNotifications(
+    notification => {
+      addTestResult(`Received: ${notification.request.content.title || 'Notification'}`);
+    },
+    data => {
+      const payload = Object.keys(data || {}).length > 0 ? JSON.stringify(data) : 'no payload';
+      addTestResult(`Opened: ${payload}`);
+    }
+  );
 
-    const addTestResult = (message : string) => {
-        setTestResults((prev) => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
+  const environmentLabel = isDevice ? t('notifications_device') : t('notifications_simulator');
+  const permissionLabel = hasPermission ? t('notifications_permission_granted') : t('notifications_permission_denied');
+  const preferenceRows = useMemo(
+    () =>
+      preferences
+        ? [
+            { key: 'enabled', label: 'Global', value: preferences.enabled },
+            { key: 'tripReminders', label: 'Trip reminders', value: preferences.tripReminders },
+            { key: 'newMessages', label: 'Messages', value: preferences.newMessages },
+            { key: 'promotions', label: 'Promotions', value: preferences.promotions },
+            { key: 'sound', label: 'Sound', value: preferences.sound },
+          ]
+        : [],
+    [preferences]
+  );
+
+  const handleInitialize = useCallback(async () => {
+    addTestResult('Initializing notifications...');
+    const token = await initialize();
+    if (token) {
+      addTestResult(`Ready on ${token.platform}`);
+    } else {
+      addTestResult('Initialization blocked by permissions or device limits.');
+    }
+  }, [addTestResult, initialize]);
+
+  const handleSendImmediate = useCallback(async () => {
+    if (!hasPermission) {
+      addTestResult('Notifications are not enabled yet.');
+      return;
     }
 
-    useEffect(() => {
-        refreshScheduled();
-    });
+    try {
+      await send('Test Notification', 'This is an immediate notification test.');
+      addTestResult('Immediate notification sent.');
+    } catch (sendError) {
+      addTestResult(sendError instanceof Error ? sendError.message : 'Unable to send notification.');
+    }
+  }, [addTestResult, hasPermission, send]);
 
-    const handleInitialize = async () => {
-        addTestResult('🔄 Initialisation des notifications ...');
-        const token = await initialize();
+  const handleSchedule = useCallback(
+    async (seconds: number, title: string, body: string) => {
+      if (!hasPermission) {
+        addTestResult('Notifications are not enabled yet.');
+        return;
+      }
 
-         if (token) {
-            addTestResult(`✅ Token obtenu: ${token.token.substring(0, 20)}...`);
-            addTestResult(`📱 Plateforme: ${token.platform}`);
-            addTestResult(`🆔 Device: ${token.deviceId || 'N/A'}`);
-         } else {
-            addTestResult(`❌ Echec de l\'intialisation`);
-         }
-    };
+      const date = new Date(Date.now() + seconds * 1000);
 
-    const handleSendImmediate = async () => {
-        try {
-            const notificationId = await send(
-                'Test Notification',
-                'Ceci est une notification de test immediate !',
-            );
-            addTestResult(`✅ Notification envoyée (ID: ${notificationId.substring(0, 8)}...)`);
-        } catch (error) {
-            addTestResult(`❌ Erreur: ${error}`);
-        }
-    };
+      try {
+        await schedule(title, body, date, { testType: `scheduled_${seconds}s` });
+        addTestResult(`Scheduled for ${date.toLocaleTimeString()}.`);
+      } catch (scheduleError) {
+        addTestResult(scheduleError instanceof Error ? scheduleError.message : 'Unable to schedule notification.');
+      }
+    },
+    [addTestResult, hasPermission, schedule]
+  );
 
+  const handleSetBadge = useCallback(async () => {
+    try {
+      await setBadgeCount(5);
+      addTestResult('Badge updated to 5.');
+    } catch (badgeError) {
+      addTestResult(badgeError instanceof Error ? badgeError.message : 'Unable to update badge.');
+    }
+  }, [addTestResult, setBadgeCount]);
 
-     const handleSchedule5Seconds = async () => {
-        const date = new Date();
-        date.setSeconds(date.getSeconds() + 5);
+  const handleClearBadge = useCallback(async () => {
+    try {
+      await clearBadge();
+      addTestResult('Badge cleared.');
+    } catch (badgeError) {
+      addTestResult(badgeError instanceof Error ? badgeError.message : 'Unable to clear badge.');
+    }
+  }, [addTestResult, clearBadge]);
 
-        try {
-            await schedule(
-                'Notification Programmée',
-                'Cette notification apparaîtra dans 5 secondes',
-                date,
-                {testType: 'scheduled_5s'}
-            );
-            addTestResult(`✅ Notification Programmée pour ${date.toLocaleTimeString()}`);
-            await refreshScheduled();
-        } catch (error) {
-            addTestResult(`❌ Erreur: ${error}`);
-        }
-    };
-
-       const handleSchedule30Seconds = async () => {
-        const date = new Date();
-        date.setSeconds(date.getSeconds() + 30);
-
-        try {
-            await schedule(
-                'Rappel de voyage',
-                'Cette notification apparaîtra dans 30 secondes',
-                date,
-                {testType: 'trip_reminder'}
-            );
-            addTestResult(`✅ Notification Programmée pour ${date.toLocaleTimeString()}`);
-            await refreshScheduled();
-        } catch (error) {
-            addTestResult(`❌ Erreur: ${error}`);
-        }
-    };
-
-     const handleSetBadge = async () => {
-       await setBadgeCount(5);
-        addTestResult('✅ Badge défini 5');
-    };
-
-      const handleClearBadge = async () => {
-       await clearBadge();
-        addTestResult('✅ Badge effacé');
-    };
-      const handleClearResults = async () => {
-       await setTestResults([]);
-    };
-
-
-
+  if (isLoading && !preferences) {
     return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color={Colors.light.primary} />
+          <Text style={styles.centerStateText}>{t('notifications_loading')}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !preferences) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ErrorState message={t('notifications_error')} onAction={refreshScheduled} />
+      </SafeAreaView>
+    );
+  }
+
+  return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient colors={[Colors.light.gradientStart, Colors.light.gradientEnd]} style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Test Notifications</Text>
-          <View style={styles.placeholder} />
+          <Text style={styles.headerTitle}>{t('notifications_title')}</Text>
+          <TouchableOpacity onPress={() => void refreshScheduled()} style={styles.refreshButton}>
+            <Text style={styles.refreshButtonText}>{t('notifications_refresh')}</Text>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Status Card */}
-        <View style={styles.statusCard}>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t('notifications_state')}</Text>
           <View style={styles.statusRow}>
-            <Ionicons 
-              name={isSimulator ? "phone-portrait-outline" : "phone-portrait"} 
-              size={20} 
-              color={isSimulator ? Colors.light.warning : Colors.light.success} 
-            />
-            <Text style={styles.statusText}>
-              {isSimulator ? 'Simulateur' : 'Appareil physique'}
-            </Text>
+            <Text style={styles.statusLabel}>{t('notifications_device_type')}</Text>
+            <Text style={styles.statusValue}>{environmentLabel}</Text>
           </View>
           <View style={styles.statusRow}>
-            <Ionicons 
-              name={hasPermission ? "checkmark-circle" : "close-circle"} 
-              size={20} 
-              color={hasPermission ? Colors.light.success : Colors.light.error} 
-            />
-            <Text style={styles.statusText}>
-              Permissions: {hasPermission ? 'Accordées' : 'Non accordées'}
-            </Text>
+            <Text style={styles.statusLabel}>{t('notifications_permission_status')}</Text>
+            <Text style={styles.statusValue}>{permissionStatus}</Text>
           </View>
-          {pushToken && (
-            <View style={styles.tokenContainer}>
-              <Text style={styles.tokenLabel}>Token:</Text>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>{t('notifications_permissions')}</Text>
+            <Text style={styles.statusValue}>{permissionLabel}</Text>
+          </View>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>{t('notifications_badge_count')}</Text>
+            <Text style={styles.statusValue}>{badgeCount}</Text>
+          </View>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>{t('notifications_scheduled_count')}</Text>
+            <Text style={styles.statusValue}>{scheduled.length}</Text>
+          </View>
+          {pushToken ? (
+            <View style={styles.tokenBlock}>
+              <Text style={styles.tokenLabel}>Token</Text>
               <Text style={styles.tokenText} numberOfLines={1}>
                 {pushToken.token}
               </Text>
             </View>
+          ) : (
+            <Text style={styles.hintText}>{t('notifications_init_hint')}</Text>
           )}
-          <View style={styles.badgeContainer}>
-            <Text style={styles.badgeLabel}>Badge count: {badgeCount}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t('notifications_actions')}</Text>
+          <TouchableOpacity onPress={handleInitialize} disabled={isLoading} style={[styles.button, styles.primaryButton]}>
+            <Ionicons name="notifications-outline" size={18} color="#fff" />
+            <Text style={styles.buttonText}>{t('notifications_initialize')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSendImmediate} style={[styles.button, styles.successButton]}>
+            <Ionicons name="send-outline" size={18} color="#fff" />
+            <Text style={styles.buttonText}>{t('notifications_immediate')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => void handleSchedule(5, 'Scheduled Notification', 'Appears in 5 seconds.')}
+            style={[styles.button, styles.infoButton]}
+          >
+            <Ionicons name="time-outline" size={18} color="#fff" />
+            <Text style={styles.buttonText}>{t('notifications_schedule_5')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => void handleSchedule(30, 'Reminder', 'Appears in 30 seconds.')}
+            style={[styles.button, styles.infoButton]}
+          >
+            <Ionicons name="calendar-outline" size={18} color="#fff" />
+            <Text style={styles.buttonText}>{t('notifications_schedule_30')}</Text>
+          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity onPress={handleSetBadge} style={[styles.button, styles.smallButton, styles.warningButton]}>
+              <Text style={styles.buttonText}>{t('notifications_badge_set')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleClearBadge} style={[styles.button, styles.smallButton, styles.dangerButton]}>
+              <Text style={styles.buttonText}>{t('notifications_badge_clear')}</Text>
+            </TouchableOpacity>
           </View>
-          {/* {scheduled.length > 0 && (
-            <View style={styles.scheduledContainer}>
-              <Text style={styles.scheduledLabel}>
-                Notifications programmées: {scheduled.length}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t('notifications_preferences')}</Text>
+          {preferenceRows.map(item => (
+            <View key={item.key} style={styles.statusRow}>
+              <Text style={styles.statusLabel}>{item.label}</Text>
+              <Text style={styles.statusValue}>
+                {item.value ? t('notifications_enabled') : t('notifications_disabled')}
               </Text>
             </View>
-          )} */}
+          ))}
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actions</Text>
-          
-          <TouchableOpacity 
-            onPress={handleInitialize} 
-            disabled={isLoading}
-            style={[styles.button, styles.buttonPrimary]}
-          >
-            <Ionicons name="notifications-outline" size={20} color="#fff" />
-            <Text style={styles.buttonText}>Initialiser les notifications</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            onPress={handleSendImmediate}
-            style={[styles.button, styles.buttonSuccess]}
-          >
-            <Ionicons name="send-outline" size={20} color="#fff" />
-            <Text style={styles.buttonText}>Notification immédiate</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            onPress={handleSchedule5Seconds}
-            style={[styles.button, styles.buttonInfo]}
-          >
-            <Ionicons name="time-outline" size={20} color="#fff" />
-            <Text style={styles.buttonText}>Programmer (5 secondes)</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            onPress={handleSchedule30Seconds}
-            style={[styles.button, styles.buttonInfo]}
-          >
-            <Ionicons name="calendar-outline" size={20} color="#fff" />
-            <Text style={styles.buttonText}>Programmer (30 secondes)</Text>
-          </TouchableOpacity>
-
-          <View style={styles.buttonRow}>
-            <TouchableOpacity 
-              onPress={handleSetBadge}
-              style={[styles.button, styles.buttonSmall, styles.buttonWarning]}
-            >
-              <Ionicons name="ellipse" size={16} color="#fff" />
-              <Text style={styles.buttonTextSmall}>Badge: 5</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              onPress={handleClearBadge}
-              style={[styles.button, styles.buttonSmall, styles.buttonDanger]}
-            >
-              <Ionicons name="close-circle-outline" size={16} color="#fff" />
-              <Text style={styles.buttonTextSmall}>Effacer badge</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Test Results */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Résultats des tests</Text>
-            {testResults.length > 0 && (
-              <TouchableOpacity onPress={handleClearResults}>
-                <Text style={styles.clearButton}>Effacer</Text>
+        <View style={styles.card}>
+          <View style={styles.logsHeader}>
+            <Text style={styles.sectionTitle}>{t('notifications_logs')}</Text>
+            {testResults.length > 0 ? (
+              <TouchableOpacity onPress={() => setTestResults([])}>
+                <Text style={styles.clearButton}>{t('notifications_clear')}</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
-          
           {testResults.length === 0 ? (
-            <View style={styles.emptyResults}>
-              <Ionicons name="document-text-outline" size={48} color={Colors.light.textSubtle} />
-              <Text style={styles.emptyText}>Aucun résultat pour le moment</Text>
-              <Text style={styles.emptySubtext}>
-                Utilisez les boutons ci-dessus pour tester les notifications
-              </Text>
+            <View style={styles.emptyState}>
+              <Ionicons name="document-text-outline" size={44} color={Colors.light.textSubtle} />
+              <Text style={styles.emptyText}>{t('notifications_no_results')}</Text>
+              <Text style={styles.emptySubtext}>{t('notifications_no_results_subtext')}</Text>
             </View>
           ) : (
-            <View style={styles.resultsContainer}>
-              {testResults.map((result, index) => (
-                <View key={index} style={styles.resultItem}>
-                  <Text style={styles.resultText}>{result}</Text>
-                </View>
-              ))}
-            </View>
+            testResults.map(result => (
+              <View key={result} style={styles.logItem}>
+                <Text style={styles.logText}>{result}</Text>
+              </View>
+            ))
           )}
         </View>
 
-        {/* Info Box */}
-        {isSimulator && (
-          <View style={styles.infoBox}>
-            <Ionicons name="information-circle" size={20} color={Colors.light.info} />
-            <Text style={styles.infoText}>
-              Mode simulateur: Les notifications locales fonctionnent, mais les push tokens Expo nécessitent un appareil physique.
-            </Text>
+        {error ? (
+          <View style={styles.inlineError}>
+            <Text style={styles.inlineErrorText}>{error}</Text>
           </View>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: Colors.light.background,
-    },
-    header: {
-        paddingHorizontal: Spacing.xl,
-        paddingTop: Spacing.lg,
-        paddingBottom: Spacing.xl,
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
-    },
-    headerTop: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255, 255, 255, 0.18)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    placeholder: {
-        width: 40,
-    },
-    content: {
-        flex: 1,
-        padding: Spacing.xl,
-    },
-    statusCard: {
-        backgroundColor: Colors.light.surface,
-        borderRadius: Radius.lg,
-        padding: 20,
-        marginBottom: Spacing.xl,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    statusRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 12,
-    },
-    statusText: {
-        fontSize: 14,
-        color: Colors.light.text,
-        fontWeight: '500',
-    },
-    tokenContainer: {
-        marginTop: 12,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: Colors.light.border,
-    },
-    tokenLabel: {
-        fontSize: 12,
-        color: Colors.light.textSubtle,
-        marginBottom: 4,
-    },
-    tokenText: {
-        fontSize: 11,
-        color: Colors.light.text,
-        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    },
-    badgeContainer: {
-        marginTop: 12,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: Colors.light.border,
-    },
-    badgeLabel: {
-        fontSize: 14,
-        color: Colors.light.text,
-        fontWeight: '500',
-    },
-    scheduledContainer: {
-        marginTop: 8,
-    },
-    scheduledLabel: {
-        fontSize: 14,
-        color: Colors.light.textSubtle,
-    },
-    section: {
-        marginBottom: Spacing.xl,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: Colors.light.text,
-        marginBottom: 16,
-    },
-    button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 20,
-        borderRadius: Radius.md,
-        marginBottom: 12,
-        gap: 8,
-    },
-    buttonPrimary: {
-        backgroundColor: Colors.light.primary,
-    },
-    buttonSuccess: {
-        backgroundColor: Colors.light.success,
-    },
-    buttonInfo: {
-        backgroundColor: Colors.light.secondary,
-    },
-    buttonWarning: {
-        backgroundColor: Colors.light.warning,
-    },
-    buttonDanger: {
-        backgroundColor: Colors.light.error,
-    },
-    buttonSmall: {
-        flex: 1,
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        gap: Spacing.md,
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    buttonTextSmall: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    resultsContainer: {
-        backgroundColor: Colors.light.surface,
-        borderRadius: Radius.md,
-        padding: 16,
-        maxHeight: 300,
-    },
-    resultItem: {
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.light.border,
-    },
-    resultText: {
-        fontSize: 12,
-        color: Colors.light.text,
-        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    },
-    emptyResults: {
-        backgroundColor: Colors.light.surface,
-        borderRadius: Radius.md,
-        padding: 32,
-        alignItems: 'center',
-    },
-    emptyText: {
-        fontSize: 16,
-        color: Colors.light.textSubtle,
-        marginTop: 12,
-        fontWeight: '500',
-    },
-    emptySubtext: {
-        fontSize: 14,
-        color: Colors.light.textSubtle,
-        marginTop: 4,
-        textAlign: 'center',
-    },
-    clearButton: {
-        color: Colors.light.primary,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    infoBox: {
-        flexDirection: 'row',
-        backgroundColor: Colors.light.surfaceMuted,
-        borderRadius: Radius.md,
-        padding: 16,
-        gap: 12,
-        marginBottom: 24,
-    },
-    infoText: {
-        flex: 1,
-        fontSize: 14,
-        color: Colors.light.info,
-        lineHeight: 20,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    minWidth: 64,
+    alignItems: 'flex-end',
+  },
+  refreshButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  headerTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  content: {
+    flex: 1,
+    padding: Spacing.lg,
+  },
+  card: {
+    backgroundColor: Colors.light.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.light.text,
+    marginBottom: Spacing.xs,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: 4,
+  },
+  statusLabel: {
+    flex: 1,
+    color: Colors.light.textMuted,
+  },
+  statusValue: {
+    color: Colors.light.text,
+    fontWeight: '600',
+  },
+  tokenBlock: {
+    marginTop: Spacing.sm,
+    backgroundColor: Colors.light.surfaceMuted,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+  },
+  tokenLabel: {
+    color: Colors.light.textMuted,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  tokenText: {
+    color: Colors.light.text,
+    fontWeight: '600',
+  },
+  hintText: {
+    color: Colors.light.textMuted,
+    marginTop: Spacing.sm,
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  primaryButton: {
+    backgroundColor: Colors.light.primary,
+  },
+  successButton: {
+    backgroundColor: Colors.light.success,
+  },
+  infoButton: {
+    backgroundColor: Colors.light.info,
+  },
+  warningButton: {
+    backgroundColor: Colors.light.warning,
+  },
+  dangerButton: {
+    backgroundColor: Colors.light.error,
+  },
+  smallButton: {
+    flex: 1,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  logsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  clearButton: {
+    color: Colors.light.primary,
+    fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    gap: Spacing.xs,
+  },
+  emptyText: {
+    color: Colors.light.text,
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    color: Colors.light.textMuted,
+    textAlign: 'center',
+  },
+  logItem: {
+    backgroundColor: Colors.light.surfaceMuted,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+  },
+  logText: {
+    color: Colors.light.text,
+  },
+  inlineError: {
+    backgroundColor: Colors.light.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  inlineErrorText: {
+    color: Colors.light.error,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+  centerStateText: {
+    color: Colors.light.textMuted,
+  },
 });

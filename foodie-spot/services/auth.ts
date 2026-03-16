@@ -1,10 +1,12 @@
 // services/auth.ts
 
 import * as SecureStore from 'expo-secure-store';
-import api, { getApiErrorMessage } from './api';
+import { Platform } from 'react-native';
+import api from './api';
 import log from './logger';
 import { storage, STORAGE_KEYS } from './storage';
 import { cache } from './cache';
+import { getApiErrorMessage, getApiErrorStatus } from './api-utils';
 
 // ============================================
 // Types
@@ -89,6 +91,11 @@ class AuthService {
   }
 
   private async canUseSecureStore(): Promise<boolean> {
+    if (Platform.OS === 'web') {
+      this.secureStoreAvailable = false;
+      return false;
+    }
+
     if (this.secureStoreAvailable !== null) {
       return this.secureStoreAvailable;
     }
@@ -155,6 +162,7 @@ class AuthService {
   async setAccessToken(token: string): Promise<void> {
     try {
       await this.setStoredValue(STORAGE_KEYS.ACCESS_TOKEN, token);
+      api.defaults.headers.common.Authorization = `Bearer ${token}`;
     } catch (error) {
       log.error('Failed to set access token:', error);
       throw error;
@@ -185,6 +193,7 @@ class AuthService {
       await this.deleteStoredValue(STORAGE_KEYS.REFRESH_TOKEN);
       await this.deleteStoredValue(STORAGE_KEYS.USER);
       await this.deleteStoredValue(STORAGE_KEYS.AUTH_TOKEN);
+      delete api.defaults.headers.common.Authorization;
     } catch (error) {
       log.error('Failed to clear tokens:', error);
     }
@@ -290,9 +299,9 @@ class AuthService {
       log.info('✅ [Auth] Login successful for:', user.email);
       log.debug('Received tokens:', tokens);
       return { user, tokens };
-    } catch (error: any) {
-      log.error('❌ [Auth] Login failed:', error.message);
-      if (error.response?.status === 401) {
+    } catch (error: unknown) {
+      log.error('❌ [Auth] Login failed:', error);
+      if (getApiErrorStatus(error) === 401) {
         throw new Error('Email ou mot de passe incorrect');
       }
       throw new Error(getApiErrorMessage(error, 'Erreur de connexion. Veuillez reessayer.'));
@@ -332,9 +341,9 @@ class AuthService {
 
       log.info('✅ [Auth] Registration successful for:', user.email);
       return { user, tokens };
-    } catch (error: any) {
-      log.error('❌ [Auth] Registration failed:', error.message);
-      if (error.response?.status === 409) {
+    } catch (error: unknown) {
+      log.error('❌ [Auth] Registration failed:', error);
+      if (getApiErrorStatus(error) === 409) {
         throw new Error('Cet email est déjà utilisé');
       }
       throw new Error(getApiErrorMessage(error, 'Erreur lors de l\'inscription. Veuillez reessayer.'));

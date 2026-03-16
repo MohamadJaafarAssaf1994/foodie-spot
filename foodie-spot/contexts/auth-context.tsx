@@ -58,11 +58,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       setError(null);
       const result = await auth.login(credentials);
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const state = await auth.getAuthState();
       setError(null);
-      setUser(state.user);
-      setIsAuthenticated(state.isAuthenticated);
+      setUser(result.user);
+      setIsAuthenticated(true);
+      router.replace('/');
       log.info('✅ [AuthContext] Login completed');
       return result;
     } catch (err) {
@@ -81,11 +80,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       setError(null);
       const result = await auth.register(data);
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const state = await auth.getAuthState();
       setError(null);
-      setUser(state.user);
-      setIsAuthenticated(state.isAuthenticated);
+      setUser(result.user);
+      setIsAuthenticated(true);
+      router.replace('/');
       log.info('✅ [AuthContext] Registration completed');
       return result;
     } catch (err) {
@@ -108,7 +106,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       setIsAuthenticated(false);
       log.info('✅ [AuthContext] Logout completed');
-     router.replace('/(auth)/login');
+      router.replace('/login');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Échec de déconnexion';
       setError(message);

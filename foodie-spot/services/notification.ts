@@ -24,8 +24,10 @@ export interface NotificationPreferences {
 export interface NotificationState {
     pushToken: PushToken | null;
     preferences: NotificationPreferences;
+    permissionStatus: Notifications.PermissionStatus;
     badgeCount: number;
     scheduled: Notifications.NotificationRequest[];
+    isDevice: boolean;
 }
 
 export type NotificationPayload = Record<string, unknown>;
@@ -139,6 +141,21 @@ export const notifications = {
             trigger: null,
         })
     },
+    async sendOrderDelivered(orderId: string, restaurantName?: string): Promise<string | null> {
+        const { status } = await Notifications.getPermissionsAsync();
+
+        if (status !== 'granted') {
+            return null;
+        }
+
+        return this.send(
+            'Commande livree',
+            restaurantName
+                ? `Votre commande de ${restaurantName} a ete livree.`
+                : 'Votre commande a ete livree.',
+            { orderId, type: 'order_delivered' }
+        );
+    },
     async schedule(title: string, body: string, date: Date, data?: NotificationPayload): Promise<string> {
          return Notifications.scheduleNotificationAsync({
             content: { title, body, data: data || {}, sound: 'default'},
@@ -192,7 +209,8 @@ export const notifications = {
        await AsyncStorage.setItem(KEYS.PREFERENCES, JSON.stringify(prefs));
     },
     async getState(): Promise<NotificationState> {
-        const [pushToken, preferences, badgeCount, scheduled] = await Promise.all([
+        const [{ status }, pushToken, preferences, badgeCount, scheduled] = await Promise.all([
+            Notifications.getPermissionsAsync(),
             this.getToken(),
             this.getPreferences(),
             this.getBadge(),
@@ -202,8 +220,10 @@ export const notifications = {
         return {
             pushToken,
             preferences,
+            permissionStatus: status,
             badgeCount,
             scheduled,
+            isDevice: Device.isDevice,
         };
     },
     
@@ -212,12 +232,10 @@ export const notifications = {
         onTapped?: (response: Notifications.NotificationResponse) => void
     ): () => void {
         const receivedSub = Notifications.addNotificationReceivedListener((n) => {
-            log.info('Notification received:', n);
             onReceived?.(n);
         });
 
         const responseSub = Notifications.addNotificationResponseReceivedListener((r) => {
-            log.info('Notification tapped:', r);
             onTapped?.(r);
         });
 

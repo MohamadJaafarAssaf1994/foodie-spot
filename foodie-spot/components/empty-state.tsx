@@ -1,17 +1,23 @@
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/theme-context';
 
 interface EmptyStateProps {
   title: string;
   icon?: string;
+  illustration?: React.ReactNode;
 }
 
-export function EmptyState({ title, icon }: EmptyStateProps) {
+export function EmptyState({ title, icon, illustration }: EmptyStateProps) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
+      {illustration ? <View style={styles.illustration}>{illustration}</View> : null}
       {icon ? <Text style={styles.icon}>{icon}</Text> : null}
-      <Text style={styles.title}>{title}</Text>
+      <Text style={[styles.title, { color: colors.textSubtle }]}>{title}</Text>
     </View>
   );
 }
@@ -26,9 +32,11 @@ const styles = StyleSheet.create({
     fontSize: 48,
     marginBottom: Spacing.md,
   },
+  illustration: {
+    marginBottom: Spacing.md,
+  },
   title: {
     fontSize: 16,
-    color: Colors.light.textSubtle,
     textAlign: 'center',
   },
 });
